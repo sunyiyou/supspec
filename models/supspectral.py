@@ -83,5 +83,5 @@ class SupSpectral(nn.Module):
         uz1 = z[len(x1)+len(x2):len(x1)+len(x2)+len(ux1), :]
         uz2 = z[len(x1)+len(x2)+len(ux1):, :]
 
-        L, d_dict = D(z1, z2, uz1, uz2, target, mu=self.mu)
+        L, d_dict = self.D(z1, z2, uz1, uz2, target, mu=self.mu)
         return {'loss': L, 'd_dict': d_dict}
