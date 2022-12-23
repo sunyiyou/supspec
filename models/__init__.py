@@ -16,7 +16,7 @@ def get_backbone(backbone, castrate=True):
     return backbone
 
 
-def get_model(model_cfg):
+def get_model(model_cfg, args=None):
     if model_cfg.name == 'spectral':
         if "mu" not in model_cfg.__dict__:
             model_cfg.mu = 1.0
@@ -24,7 +24,7 @@ def get_model(model_cfg):
     elif model_cfg.name == 'supspectral':
         if "mu" not in model_cfg.__dict__:
             model_cfg.mu = 1.0
-        model = SupSpectral(get_backbone(model_cfg.backbone), mu=model_cfg.mu)
+        model = SupSpectral(get_backbone(model_cfg.backbone), mu=model_cfg.mu, args=args)
     else:
         raise NotImplementedError
     return model

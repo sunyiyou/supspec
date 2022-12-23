@@ -27,7 +27,7 @@ def main(log_writer, log_file, device, args):
 
 
     import open_world_cifar as datasets
-    dataroot = '/home/sunyiyou/workspace/orca/datasets'
+    dataroot = args.data_dir
     if args.dataset.name == 'cifar10':
         train_label_set = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs))
         train_unlabel_set = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=False, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs), unlabeled_idxs=train_label_set.unlabeled_idxs)
@@ -53,7 +53,7 @@ def main(log_writer, log_file, device, args):
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=100, shuffle=False, num_workers=2)
 
     # define model
-    model = get_model(args.model).to(device)
+    model = get_model(args.model, args).to(device)
     # model = torch.nn.DataParallel(model)
 
     # define optimizer
@@ -187,11 +187,11 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config-file', default='configs/supspectral_resnet_mlp1000_norelu_cifar100_lr003_mu1.yaml', type=str)
     parser.add_argument('--debug', action='store_true')
-    parser.add_argument('--log_freq', type=int, default=20)
+    parser.add_argument('--log_freq', type=int, default=50)
     parser.add_argument('--workers', type=int, default=32)
     parser.add_argument('--test_bs', type=int, default=80)
     parser.add_argument('--download', action='store_true', help="if can't find dataset, download from web")
-    parser.add_argument('--data_dir', type=str, default='PATH_TO_DATASET')
+    parser.add_argument('--data_dir', type=str, default='/home/sunyiyou/workspace/orca/datasets')
     parser.add_argument('--dist_url', type=str, default='tcp://localhost:10001')
     parser.add_argument('--log_dir', type=str, default='./log/spectral')
     parser.add_argument('--ckpt_dir', type=str, default='~/.cache/')
@@ -203,6 +203,11 @@ def get_args():
     parser.add_argument('--print_freq', type=int, default=10)
     parser.add_argument('--labeled-num', default=50, type=int)
     parser.add_argument('--labeled-ratio', default=1, type=float)
+    parser.add_argument('--c1', default=0.0002, type=float)
+    parser.add_argument('--c2', default=1.0, type=float)
+    parser.add_argument('--c3', default=1e-8, type=float)
+    parser.add_argument('--c4', default=5e-5, type=float)
+    parser.add_argument('--c5', default=0.25, type=float)
 
     args = parser.parse_args()
 
