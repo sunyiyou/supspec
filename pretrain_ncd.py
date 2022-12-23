@@ -187,13 +187,13 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config-file', default='configs/supspectral_resnet_mlp1000_norelu_cifar100_lr003_mu1.yaml', type=str)
     parser.add_argument('--debug', action='store_true')
-    parser.add_argument('--log_freq', type=int, default=50)
+    parser.add_argument('--log_freq', type=int, default=100)
     parser.add_argument('--workers', type=int, default=32)
     parser.add_argument('--test_bs', type=int, default=80)
     parser.add_argument('--download', action='store_true', help="if can't find dataset, download from web")
     parser.add_argument('--data_dir', type=str, default='/home/sunyiyou/workspace/orca/datasets')
     parser.add_argument('--dist_url', type=str, default='tcp://localhost:10001')
-    parser.add_argument('--log_dir', type=str, default='./log/spectral')
+    parser.add_argument('--log_dir', type=str, default='./log/')
     parser.add_argument('--ckpt_dir', type=str, default='~/.cache/')
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
     parser.add_argument('--eval_from', type=str, default=None)
@@ -228,7 +228,8 @@ def get_args():
 
     assert not None in [args.log_dir, args.data_dir, args.ckpt_dir, args.name]
 
-    args.log_dir = os.path.join(args.log_dir, 'in-progress-'+'{}'.format(date.today())+args.name+'-log_freq:{}'.format(args.log_freq))
+    disc = f"c1-{args.c1}-c2-{args.c2}-c3-{args.c3}-c4-{args.c4}-c5-{args.c5}"
+    args.log_dir = os.path.join(args.log_dir, 'in-progress-'+'{}'.format(date.today())+args.name+'-{}'.format(disc))
 
     os.makedirs(args.log_dir, exist_ok=True)
     print(f'creating file {args.log_dir}')
