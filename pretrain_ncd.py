@@ -203,11 +203,15 @@ def get_args():
     parser.add_argument('--print_freq', type=int, default=10)
     parser.add_argument('--labeled-num', default=50, type=int)
     parser.add_argument('--labeled-ratio', default=1, type=float)
-    parser.add_argument('--c1', default=0.0002, type=float)
-    parser.add_argument('--c2', default=1.0, type=float)
-    parser.add_argument('--c3', default=1e-8, type=float)
-    parser.add_argument('--c4', default=5e-5, type=float)
-    parser.add_argument('--c5', default=0.25, type=float)
+    # parser.add_argument('--c1', default=0.0002, type=float)
+    # parser.add_argument('--c2', default=1.0, type=float)
+    # parser.add_argument('--c3', default=1e-8, type=float)
+    # parser.add_argument('--c4', default=5e-5, type=float)
+    # parser.add_argument('--c5', default=0.25, type=float)
+    parser.add_argument('--gamma_l', default=0.2, type=float)
+    parser.add_argument('--c3_rate', default=1, type=float)
+    parser.add_argument('--c4_rate', default=1, type=float)
+    parser.add_argument('--c5_rate', default=2, type=float)
 
     args = parser.parse_args()
 
@@ -228,7 +232,15 @@ def get_args():
 
     assert not None in [args.log_dir, args.data_dir, args.ckpt_dir, args.name]
 
-    disc = f"c1-{args.c1}-c2-{args.c2}-c3-{args.c3}-c4-{args.c4}-c5-{args.c5}"
+    gamma_l = 0.35
+    gamma_u = 0.5
+    scale = 2
+    args.c1, args.c2 = 2 * gamma_l ** 2 * scale, 2 * gamma_u * scale
+    args.c3, args.c4, args.c5 = gamma_l ** 4 * scale * args.c3_rate, \
+                 gamma_l ** 2 * gamma_u * scale * args.c4_rate, \
+                 gamma_u ** 2 * scale * args.c5_rate
+
+    disc = f"c1-{args.c1}-c2-{args.c2}-c3-{args.c3}-c4-{args.c4}-c5-{args.c5}-gamma_l-{args.gamma_l}-r345-{args.c3_rate}-{args.c4_rate}-{args.c5_rate}"
     args.log_dir = os.path.join(args.log_dir, 'in-progress-'+'{}'.format(date.today())+args.name+'-{}'.format(disc))
 
     os.makedirs(args.log_dir, exist_ok=True)

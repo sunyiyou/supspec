@@ -41,11 +41,6 @@ class SupSpectral(nn.Module):
         mat_ll_s2 = mat_ll ** 2 * (1 - torch.diag(torch.ones(bsz_l)).to(device))
         mat_uu_s2 = mat_uu ** 2 * (1 - torch.diag(torch.ones(bsz_u)).to(device))
 
-        # gamma_l = 0.01
-        # gamma_u = 0.5
-        # scale = 1
-        # c1, c2 = 2 * gamma_l**2 * scale, 2 * gamma_u * scale
-        # c3, c4, c5 = gamma_l**4 * scale, gamma_l**2 * gamma_u * scale, gamma_u**2 * scale
 
         c1, c2 = self.args.c1, self.args.c2
         c3, c4, c5 = self.args.c3, self.args.c4, self.args.c5
