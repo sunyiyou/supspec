@@ -36,6 +36,7 @@ class OPENWORLDCIFAR100(torchvision.datasets.CIFAR100):
                     self.targets.extend(entry['labels'])
                 else:
                     self.targets.extend(entry['fine_labels'])
+        self.targets = np.array(self.targets)
 
         self.data = np.vstack(self.data).reshape(-1, 3, 32, 32)
         self.data = self.data.transpose((0, 2, 3, 1))  # convert to HWC
@@ -61,8 +62,7 @@ class OPENWORLDCIFAR100(torchvision.datasets.CIFAR100):
         return labeled_idxs, unlabeled_idxs
 
     def shrink_data(self, idxs):
-        targets = np.array(self.targets)
-        self.targets = targets[idxs].tolist()
+        self.targets = self.targets[idxs].tolist()
         self.data = self.data[idxs, ...]
 
 class OPENWORLDCIFAR10(torchvision.datasets.CIFAR10):

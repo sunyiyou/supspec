@@ -6,9 +6,14 @@ from torchvision.models import resnet50
 
 
 def normalized_thresh(z, mu=1.0):
-    mask = (torch.norm(z, p=2, dim=1) < np.sqrt(mu)).float().unsqueeze(1)
-    return mask * z + (1 - mask) * F.normalize(z, dim=1) * np.sqrt(mu)
+    if len(z.shape) == 1:
+        mask = (torch.norm(z, p=2, dim=0) < np.sqrt(mu)).float()
+        return mask * z + (1 - mask) * F.normalize(z, dim=0) * np.sqrt(mu)
+    else:
+        mask = (torch.norm(z, p=2, dim=1) < np.sqrt(mu)).float().unsqueeze(1)
+        return mask * z + (1 - mask) * F.normalize(z, dim=1) * np.sqrt(mu)
 
+normalizer = lambda x: x / torch.norm(x, p=2, dim=-1, keepdim=True) + 1e-10
 
 class projection_identity(nn.Module):
     def __init__(self):
@@ -28,6 +33,12 @@ class SupSpectral(nn.Module):
         self.args = args
         self.backbone = backbone
         self.projector = projection_identity()
+
+        self.proto_num = self.args.dataset.numclasses - self.args.labeled_num
+        self.register_buffer("proto_known", normalizer(torch.randn((self.args.labeled_num, args.proj_feat_dim), dtype=torch.float)).to(args.device))
+        self.register_buffer("proto_novel", normalizer(torch.randn((self.proto_num, args.proj_feat_dim), dtype=torch.float)).to(args.device))
+        self.register_buffer("label_stat", torch.zeros(self.proto_num, dtype=torch.int))
+
 
     def D(self, z1, z2, uz1, uz2, target, mu=1.0):
         device = z1.device
@@ -68,15 +79,89 @@ class SupSpectral(nn.Module):
                                                               "loss3": loss3 / mu, "loss4": loss4 / mu,
                                                               "loss5": loss5 / mu}
 
+    def forward_eval(self, x, proto_type='novel'):
+        feat = self.backbone.features(x)
+        z = normalized_thresh(self.projector(self.backbone.heads(feat)))
+        if proto_type == 'novel':
+            logit = z @ self.proto_novel.data.T
+        elif proto_type == 'known':
+            logit = z @ self.proto_known.data.T
+        prob = F.softmax(logit, dim=1)
+        conf, pred = prob.max(1)
+        return {
+            "logit": logit,
+            "features": feat,
+            "conf": conf,
+            "label_pseudo": pred,
+        }
+
     def forward_ncd(self, x1, x2, ux1, ux2, target, mu=1.0):
         x = torch.cat([x1, x2, ux1, ux2], 0)
-        f = self.backbone(x)
-        z = self.projector(f)
+        z = self.projector(self.backbone(x))
         z = normalized_thresh(z, mu)
         z1 = z[0:len(x1), :]
         z2 = z[len(x1):len(x1)+len(x2), :]
         uz1 = z[len(x1)+len(x2):len(x1)+len(x2)+len(ux1), :]
         uz2 = z[len(x1)+len(x2)+len(ux1):, :]
 
-        L, d_dict = self.D(z1, z2, uz1, uz2, target, mu=self.mu)
-        return {'loss': L, 'd_dict': d_dict}
+        spec_loss, d_dict = self.D(z1, z2, uz1, uz2, target, mu=self.mu)
+
+        dist = uz1 @ self.proto_novel.data.T * 10
+        label_pseudo = dist.argmax(1)
+        self.update_label_stat(label_pseudo)
+        rand_order = np.random.choice(len(label_pseudo), len(label_pseudo), replace=False)
+        self.update_prototype_lazy(uz1[rand_order], label_pseudo[rand_order], momemt=self.args.momentum_proto)
+
+        rand_order = np.random.choice(len(target), len(target), replace=False)
+        self.update_prototype(z1[rand_order], target[rand_order], momemt=self.args.momentum_proto)
+
+        ent_loss = self.entropy(torch.softmax(dist, dim=1).mean(0))
+        d_dict['loss_ent'] = ent_loss.item()
+
+        loss = spec_loss - self.args.went * ent_loss
+        return {'loss': loss, 'd_dict': d_dict}
+
+    @torch.no_grad()
+    def sync_prototype(self):
+        self.proto_novel.data = self.proto_tmp.data
+
+    @torch.no_grad()
+    def reset_stat(self):
+        self.label_stat = torch.zeros(self.proto_num, dtype=torch.int).to(self.label_stat.device)
+
+
+    def update_prototype_lazy(self, feat, label, weight=None, momemt=0.9):
+        self.proto_tmp = self.proto_novel.clone().detach()
+        if weight is None:
+            weight = torch.ones_like(label)
+        for i, l in enumerate(label):
+            alpha = 1 - (1. - momemt) * weight[i]
+            self.proto_tmp[l] = normalizer(alpha * self.proto_tmp[l].data + (1. - alpha) * feat[i])
+
+    @torch.no_grad()
+    def update_prototype(self, feat, label, weight=None, momemt=0.9):
+        if weight is None:
+            weight = torch.ones_like(label)
+        for i, l in enumerate(label):
+            alpha = 1 - (1. - momemt) * weight[i]
+            self.proto_known[l] = normalizer(alpha * self.proto_known[l].data + (1. - alpha) * feat[i])
+    @torch.no_grad()
+    def update_label_stat(self, label):
+        self.label_stat += label.bincount(minlength=self.proto_num).to(self.label_stat.device)
+
+    def entropy(self, x):
+        """
+        Helper function to compute the entropy over the batch
+        input: batch w/ shape [b, num_classes]
+        output: entropy value [is ideally -log(num_classes)]
+        """
+        EPS = 1e-5
+        x_ = torch.clamp(x, min=EPS)
+        b = x_ * torch.log(x_)
+
+        if len(b.size()) == 2:  # Sample-wise entropy
+            return - b.sum(dim=1).mean()
+        elif len(b.size()) == 1:  # Distribution-wise entropy
+            return - b.sum()
+        else:
+            raise ValueError('Input tensor is %d-Dimensional' % (len(b.size())))

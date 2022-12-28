@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import os
-__all__ = ['resnet18_cifar_variant1_mlp1000_norelu',
+__all__ = ['resnet18_cifar_variant1_mlp_norelu',
+           'resnet18_cifar_variant1_mlp1000_norelu',
            'resnet18_cifar_variant1_mlp512_norelu',
            'resnet18_cifar_variant1_mlp256_norelu',
            'resnet18_cifar_variant1_mlp128_norelu',
@@ -232,6 +233,13 @@ class ResNet(nn.Module):
         x = x.reshape(x.size(0), -1)
         return x
 
+    def heads(self, x, normalize_feature=False):
+        x = self.proj_resnet_layer1(x)
+        x = self.proj_resnet_layer2(x)
+        if normalize_feature:
+            x = torch.nn.functional.normalize(x, dim=1)
+        x = self.fc(x)
+        return x
 
 def _resnet(arch, block, layers, output_dim, pretrained, progress, device, **kwargs):
     model = ResNet(block, layers, output_dim, **kwargs)
@@ -322,6 +330,15 @@ def resnext101_32x8d(pretrained=False, progress=True, device='cpu', **kwargs):
     return _resnet('resnext101_32x8d', Bottleneck, [3, 4, 23, 3],
                    pretrained, progress, device, **kwargs)
 
+def resnet18_cifar_variant1_mlp_norelu(pretrained=False, progress=True, device='cpu', featdim=1000, **kwargs):
+    """Constructs a ResNet-18 model.
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+        progress (bool): If True, displays a progress bar of the download to stderr
+    """
+    return _resnet('resnet18_cifar_variant1_mlp1000_norelu', BasicBlock, [2, 2, 2, 2], featdim, pretrained, progress, device,
+                   **kwargs)
 
 def resnet18_cifar_variant1_mlp1000_norelu(pretrained=False, progress=True, device='cpu', **kwargs):
     """Constructs a ResNet-18 model.

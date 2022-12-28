@@ -255,3 +255,9 @@ def plot_cluster(features, labels, sampling_ratio=1., snippet=None, path=None, f
         plt.close()
     else:
         plt.show()
+
+
+def accuracy(output, target):
+    num_correct = np.sum(output == target)
+    res = num_correct / len(target)
+    return res
