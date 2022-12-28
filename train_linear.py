@@ -11,6 +11,7 @@ import torch
 import torch.backends.cudnn as cudnn
 import torch.optim as optim
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 
 from ylib.ytool import ArrayDataset
@@ -160,6 +161,7 @@ def validate(val_loader, classifier, criterion, print_freq):
     losses = AverageMeter()
     top1 = AverageMeter()
 
+    preds = np.array([])
 
     with torch.no_grad():
         end = time.time()
@@ -173,6 +175,9 @@ def validate(val_loader, classifier, criterion, print_freq):
 
             output = classifier(features.detach())
             loss = criterion(output, labels)
+            prob = F.softmax(output, dim=1)
+            conf, pred = prob.max(1)
+            preds = np.append(preds, pred.cpu().numpy())
 
             # update metric
             losses.update(loss.item(), bsz)
@@ -192,7 +197,7 @@ def validate(val_loader, classifier, criterion, print_freq):
             #        loss=losses, top1=top1))
 
     # print(' * Acc@1 {top1.avg:.3f}'.format(top1=top1))
-    return losses.avg, top1.avg
+    return losses.avg, top1.avg, preds
 
 def get_linear_acc(ftrain, ltrain, ftest, ltest, n_cls, epochs=50, args=None, classifier=None, print_ret=True):
 
@@ -231,7 +236,7 @@ def get_linear_acc(ftrain, ltrain, ftest, ltest, n_cls, epochs=50, args=None, cl
 
     optimizer = set_optimizer(opt, classifier)
 
-
+    best_preds = None
     # training routine
     for epoch in range(opt.start_epoch + 1, opt.epochs + 1):
         adjust_learning_rate(opt, optimizer, epoch)
@@ -242,15 +247,16 @@ def get_linear_acc(ftrain, ltrain, ftest, ltest, n_cls, epochs=50, args=None, cl
         time2 = time.time()
         # print('Train epoch {}, total time {:.2f}, accuracy:{:.2f}'.format(epoch, time2 - time1, acc))
         # eval for one epoch
-        loss, val_acc = validate(val_loader, classifier, criterion, print_freq=opt.print_freq)
+        loss, val_acc, preds = validate(val_loader, classifier, criterion, print_freq=opt.print_freq)
         if val_acc > best_acc:
             best_acc = val_acc
+            best_preds = preds
 
         # print('epoch {}, best accuracy: {:.2f}'.format(epoch, best_acc))
     if print_ret:
         print(f'{acc:.2f}\t{best_acc:.2f}', end='\t')
 
-    return best_acc.item(), (classifier, cluster2label, label2cluster)
+    return best_acc.item(), (classifier, cluster2label, label2cluster, best_preds)
 
 
 def save_model(model, acc, save_file):

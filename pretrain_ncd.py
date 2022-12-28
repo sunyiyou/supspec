@@ -158,18 +158,25 @@ def main(log_writer, log_file, device, args):
                 alg = KMeans(init="k-means++", n_clusters=args.labeled_num, n_init=5, random_state=0)
                 estimator = alg.fit(ftrain)
                 kmeans_acc_train = cluster_acc(estimator.predict(ftrain), ltrain.astype(np.int64))
-                kmeans_acc_test = cluster_acc(estimator.predict(ftest), ltest_n.astype(np.int64))
+                kmeans_preds_test_n = estimator.predict(ftest)
+                kmeans_acc_test = cluster_acc(kmeans_preds_test_n, ltest_n.astype(np.int64))
+
+                kmeans_preds_all = np.concatenate([kmeans_preds_test_n + args.labeled_num, preds_test_k])
+                kmeans_overall_acc = cluster_acc(kmeans_preds_all, targets_all)
 
                 #######################  Linear Probe #######################
                 lp_acc, _ = get_linear_acc(ftrain, ltrain, ftest, ltest_n, args.labeled_num, print_ret=False)
 
+
                 write_dict['kmeans_acc_train'] =  kmeans_acc_train
                 write_dict['kmeans_acc_test'] = kmeans_acc_test
+                write_dict['kmeans_acc_test_all'] = kmeans_overall_acc
                 write_dict['lp_acc'] = lp_acc
-                print(f"K-Means Acc: {kmeans_acc_train:.4f}\t K-Means Acc: {kmeans_acc_test:.4f}\t linear Probe Acc: {lp_acc:.4f}")
+                print(f"K-Means Train Acc: {kmeans_acc_train:.4f}\t K-Means Test ACC: {kmeans_acc_test:.4f}\t K-Means All Acc: {kmeans_overall_acc:.4f}\t linear Probe Acc: {lp_acc:.4f}")
             else:
                 write_dict['kmeans_acc_train'] =  0
                 write_dict['kmeans_acc_test'] = 0
+                write_dict['kmeans_acc_test_all'] = 0
                 write_dict['lp_acc'] = 0
 
             log_writer.writerow(write_dict)
@@ -244,7 +251,7 @@ def get_args():
     parser.add_argument('--went', default=0.02, type=float)
     parser.add_argument('--momentum_proto', default=0.95, type=float)
     parser.add_argument('--seed', default=0, type=int)
-    parser.add_argument('--base_lr', default=0.02, type=int)
+    parser.add_argument('--base_lr', default=0.02, type=float)
 
     args = parser.parse_args()
 
@@ -266,7 +273,7 @@ def get_args():
 
     assert not None in [args.log_dir, args.data_dir, args.ckpt_dir, args.name]
 
-    gamma_l = 0.35
+    gamma_l = args.gamma_l
     gamma_u = 0.5
     scale = 2
     args.c1, args.c2 = 2 * gamma_l ** 2 * scale, 2 * gamma_u * scale
@@ -301,7 +308,7 @@ def get_args():
     }
 
     log_file = open(os.path.join(args.log_dir, 'log.csv'), mode='w')
-    fieldnames = ['epoch', 'lr', 'unseen_acc', 'seen_acc', 'overall_acc', 'kmeans_acc_train', 'kmeans_acc_test', 'lp_acc']
+    fieldnames = ['epoch', 'lr', 'unseen_acc', 'seen_acc', 'overall_acc', 'kmeans_acc_train', 'kmeans_acc_test', 'kmeans_acc_test_all', 'lp_acc']
     log_writer = csv.DictWriter(log_file, fieldnames=fieldnames)
     log_writer.writeheader()
 
