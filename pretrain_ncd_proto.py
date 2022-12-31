@@ -31,16 +31,14 @@ def main(log_writer, log_file, device, args):
     if args.dataset.name == 'cifar10':
         train_set_known = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs))
         train_set_novel = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=False, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
-        train_set_known_eval = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
         train_set_novel_eval = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
         test_set = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=False, train=False, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
-        test_set_known = datasets.data.Subset(test_set, np.arange(len(test_set))[test_set.targets < args.labeled_num])
-        test_set_novel = datasets.data.Subset(test_set, np.arange(len(test_set))[test_set.targets >= args.labeled_num])
+        test_set_known = datasets.data.Subset(test_set, test_set.targets < args.labeled_num)
+        test_set_novel = datasets.data.Subset(test_set, test_set.targets >= args.labeled_num)
         args.num_classes = 10
     elif args.dataset.name == 'cifar100':
         train_set_known = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs))
         train_set_novel = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
-        train_set_known_eval = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
         train_set_novel_eval = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
         test_set = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=False, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
         test_set_known = datasets.data.Subset(test_set, np.arange(len(test_set))[test_set.targets < args.labeled_num])
@@ -55,8 +53,7 @@ def main(log_writer, log_file, device, args):
     # Initialize the splits
     train_label_loader = torch.utils.data.DataLoader(train_set_known, batch_size=labeled_batch_size, shuffle=True, num_workers=4, drop_last=True)
     train_unlabel_loader = torch.utils.data.DataLoader(train_set_novel, batch_size=args.train.batch_size - labeled_batch_size, shuffle=True, num_workers=4, drop_last=True)
-    train_loader_known_eval = torch.utils.data.DataLoader(train_set_known_eval, batch_size=100, shuffle=True, num_workers=2)
-    train_loader_novel_eval = torch.utils.data.DataLoader(train_set_novel_eval, batch_size=100, shuffle=True, num_workers=2)
+    train_loader_novel_eval = torch.utils.data.DataLoader(train_set_novel_eval, batch_size=100, shuffle=False, num_workers=2)
     test_loader_known = torch.utils.data.DataLoader(test_set_known, batch_size=100, shuffle=False, num_workers=2)
     test_loader_novel = torch.utils.data.DataLoader(test_set_novel, batch_size=100, shuffle=False, num_workers=2)
 
@@ -113,7 +110,6 @@ def main(log_writer, log_file, device, args):
                 ))
 
 
-
         #######################  Evaluation #######################
         model.eval()
 
@@ -131,60 +127,66 @@ def main(log_writer, log_file, device, args):
                 features.append(feat.data.cpu().numpy())
             return np.concatenate(features), targets.astype(int), preds
 
-
-        if (epoch + 1) % args.deep_eval_freq == 0:
-
+        if (epoch + 1) % args.proto_eval_freq == 0:
             normalizer = lambda x: x / (np.linalg.norm(x, ord=2, axis=-1, keepdims=True) + 1e-10)
 
-            features_train_k, ltrain_k, _ = feat_extract(train_loader_known_eval, proto_type='known')
-            features_train_n, ltrain_n, _ = feat_extract(train_loader_novel_eval, proto_type='novel')
-            features_test_k, ltest_k, _ = feat_extract(test_loader_known, proto_type='known')
-            features_test_n, ltest_n, _ = feat_extract(test_loader_novel, proto_type='novel')
+            features_train, ltrain, preds_train = feat_extract(train_loader_novel_eval, proto_type='novel')
+            features_test, ltest_n, preds_test_n = feat_extract(test_loader_novel, proto_type='novel')
+            _, ltest_k, preds_test_k = feat_extract(test_loader_known, proto_type='known')
+            ftest = normalizer(features_test)
+            ftrain = normalizer(features_train)
 
-            ftrain_k = normalizer(features_train_k)
-            ftrain_n = normalizer(features_train_n)
-            ftest_k = normalizer(features_test_k)
-            ftest_n = normalizer(features_test_n)
+            preds_all = np.concatenate([preds_test_n + args.labeled_num, preds_test_k])
+            targets_all = np.concatenate([ltest_n, ltest_k])
+            overall_acc = cluster_acc(preds_all, targets_all)
+            seen_acc = accuracy(preds_test_k, ltest_k)
+            unseen_acc = cluster_acc(preds_test_n, ltest_n)
 
-            #######################  Linear Probe #######################
-            # lp_acc, _ = get_linear_acc(ftrain, ltrain, ftest, ltest_n, args.labeled_num, print_ret=False)
-            lp_acc, (_, _, _, lp_preds_k) = get_linear_acc(ftrain_k, ltrain_k, ftest_k, ltest_k, args.labeled_num, print_ret=False)
-
-
-            #######################  K-Means #######################
-            alg = KMeans(init="k-means++", n_clusters=args.num_classes - args.labeled_num, n_init=5, random_state=0)
-            estimator = alg.fit(ftrain_n)
-            kmeans_acc_train = cluster_acc(estimator.predict(ftrain_n), ltrain_n.astype(np.int64))
-            kmeans_preds_test_n = estimator.predict(ftest_n)
-            kmeans_acc_test = cluster_acc(kmeans_preds_test_n, ltest_n.astype(np.int64))
-
-            kmeans_preds_all = np.concatenate([lp_preds_k.astype(np.int32), kmeans_preds_test_n + args.labeled_num])
-            targets_all = np.concatenate([ltest_k, ltest_n])
-            kmeans_overall_acc = cluster_acc(kmeans_preds_all, targets_all)
+            print(f"All Acc: {overall_acc:.4f} Known Acc: {seen_acc:.4f}\t Novel Acc: {unseen_acc:.4f}")
 
             write_dict = {
                 'epoch': epoch,
                 'lr': lr_scheduler.get_lr(),
-                'overall_acc': 0,
-                'seen_acc': 0,
-                'unseen_acc': 0,
-                'kmeans_acc_train': kmeans_acc_train,
-                'kmeans_acc_test': kmeans_acc_test,
-                'kmeans_overall_acc': kmeans_overall_acc,
-                'lp_acc': lp_acc
+                'overall_acc': overall_acc,
+                'seen_acc': seen_acc,
+                'unseen_acc': unseen_acc,
             }
 
-            print(f"K-Means Train Acc: {kmeans_acc_train:.4f}\t K-Means Test ACC: {kmeans_acc_test:.4f}\t K-Means All Acc: {kmeans_overall_acc:.4f}\t linear Probe Acc: {lp_acc:.4f}")
+            if (epoch + 1) % args.deep_eval_freq == 0:
+
+                #######################  K-Means #######################
+                alg = KMeans(init="k-means++", n_clusters=args.labeled_num, n_init=5, random_state=0)
+                estimator = alg.fit(ftrain)
+                kmeans_acc_train = cluster_acc(estimator.predict(ftrain), ltrain.astype(np.int64))
+                kmeans_preds_test_n = estimator.predict(ftest)
+                kmeans_acc_test = cluster_acc(kmeans_preds_test_n, ltest_n.astype(np.int64))
+
+                kmeans_preds_all = np.concatenate([kmeans_preds_test_n + args.labeled_num, preds_test_k])
+                kmeans_overall_acc = cluster_acc(kmeans_preds_all, targets_all)
+
+                #######################  Linear Probe #######################
+                lp_acc, _ = get_linear_acc(ftrain, ltrain, ftest, ltest_n, args.labeled_num, print_ret=False)
+
+                write_dict['kmeans_acc_train'] =  kmeans_acc_train
+                write_dict['kmeans_acc_test'] = kmeans_acc_test
+                write_dict['kmeans_acc_test_all'] = kmeans_overall_acc
+                write_dict['lp_acc'] = lp_acc
+                print(f"K-Means Train Acc: {kmeans_acc_train:.4f}\t K-Means Test ACC: {kmeans_acc_test:.4f}\t K-Means All Acc: {kmeans_overall_acc:.4f}\t linear Probe Acc: {lp_acc:.4f}")
+            else:
+                write_dict['kmeans_acc_train'] =  0
+                write_dict['kmeans_acc_test'] = 0
+                write_dict['kmeans_acc_test_all'] = 0
+                write_dict['lp_acc'] = 0
 
             log_writer.writerow(write_dict)
             log_file.flush()
 
             #######################  Visualization #######################
             if (epoch + 1) % args.vis_freq == 0:
-                sampling_size = int(0.15 * len(ftrain_n))
-                rand_idx = np.random.choice(range(len(ftrain_n)), sampling_size, replace=False)
-                fvis = normalizer(ftrain_n)[rand_idx]
-                tvis = ltrain_n[rand_idx].astype(int)
+                sampling_size = int(0.15 * len(ftrain))
+                rand_idx = np.random.choice(range(len(ftrain)), sampling_size, replace=False)
+                fvis = normalizer(ftrain)[rand_idx]
+                tvis = ltrain[rand_idx].astype(int)
 
                 os.makedirs(os.path.join(args.log_dir, 'vis'), exist_ok=True)
                 plot_cluster(fvis, tvis,
@@ -229,8 +231,9 @@ def get_args():
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
     parser.add_argument('--eval_from', type=str, default=None)
     parser.add_argument('--hide_progress', action='store_true')
-    parser.add_argument('--vis_freq', type=int, default=200)
+    parser.add_argument('--vis_freq', type=int, default=50)
     parser.add_argument('--deep_eval_freq', type=int, default=50)
+    parser.add_argument('--proto_eval_freq', type=int, default=5)
     parser.add_argument('--print_freq', type=int, default=10)
     parser.add_argument('--labeled-num', default=50, type=int)
     parser.add_argument('--labeled-ratio', default=1, type=float)
@@ -244,7 +247,7 @@ def get_args():
     parser.add_argument('--c4_rate', default=1, type=float)
     parser.add_argument('--c5_rate', default=2, type=float)
     parser.add_argument('--proj_feat_dim', default=1000, type=int)
-    parser.add_argument('--went', default=0.0, type=float)
+    parser.add_argument('--went', default=0.02, type=float)
     parser.add_argument('--momentum_proto', default=0.95, type=float)
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--base_lr', default=0.02, type=float)
@@ -304,7 +307,7 @@ def get_args():
     }
 
     log_file = open(os.path.join(args.log_dir, 'log.csv'), mode='w')
-    fieldnames = ['epoch', 'lr', 'unseen_acc', 'seen_acc', 'overall_acc', 'kmeans_acc_train', 'kmeans_acc_test', 'kmeans_overall_acc', 'lp_acc']
+    fieldnames = ['epoch', 'lr', 'unseen_acc', 'seen_acc', 'overall_acc', 'kmeans_acc_train', 'kmeans_acc_test', 'kmeans_acc_test_all', 'lp_acc']
     log_writer = csv.DictWriter(log_file, fieldnames=fieldnames)
     log_writer.writeheader()
 

@@ -232,7 +232,7 @@ def get_linear_acc(ftrain, ltrain, ftest, ltest, n_cls, epochs=50, args=None, cl
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=opt.batch_size, shuffle=True)
 
     valset = ArrayDataset(ftest, labels=ctest)
-    val_loader = torch.utils.data.DataLoader(valset, batch_size=opt.batch_size, shuffle=True)
+    val_loader = torch.utils.data.DataLoader(valset, batch_size=opt.batch_size, shuffle=False)
 
     optimizer = set_optimizer(opt, classifier)
 
