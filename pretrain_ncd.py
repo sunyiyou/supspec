@@ -29,18 +29,18 @@ def main(log_writer, log_file, device, args):
     import open_world_cifar as datasets
     dataroot = args.data_dir
     if args.dataset.name == 'cifar10':
-        train_set_known = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs))
-        train_set_novel = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=False, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
-        train_set_known_eval = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
+        train_set_known = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs))
+        train_set_novel = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
+        train_set_known_eval = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
         train_set_novel_eval = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
         test_set = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=False, train=False, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
         test_set_known = datasets.data.Subset(test_set, np.arange(len(test_set))[test_set.targets < args.labeled_num])
         test_set_novel = datasets.data.Subset(test_set, np.arange(len(test_set))[test_set.targets >= args.labeled_num])
         args.num_classes = 10
     elif args.dataset.name == 'cifar100':
-        train_set_known = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs))
-        train_set_novel = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
-        train_set_known_eval = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
+        train_set_known = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs))
+        train_set_novel = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
+        train_set_known_eval = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
         train_set_novel_eval = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
         test_set = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=False, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
         test_set_known = datasets.data.Subset(test_set, np.arange(len(test_set))[test_set.targets < args.labeled_num])
@@ -240,6 +240,7 @@ def get_args():
     # parser.add_argument('--c4', default=5e-5, type=float)
     # parser.add_argument('--c5', default=0.25, type=float)
     parser.add_argument('--gamma_l', default=0.2, type=float)
+    parser.add_argument('--gamma_u', default=1, type=float)
     parser.add_argument('--c3_rate', default=1, type=float)
     parser.add_argument('--c4_rate', default=1, type=float)
     parser.add_argument('--c5_rate', default=2, type=float)
@@ -270,14 +271,14 @@ def get_args():
     assert not None in [args.log_dir, args.data_dir, args.ckpt_dir, args.name]
 
     gamma_l = args.gamma_l
-    gamma_u = 0.5
-    scale = 2
+    gamma_u = args.gamma_u
+    scale = 1
     args.c1, args.c2 = 2 * gamma_l ** 2 * scale, 2 * gamma_u * scale
     args.c3, args.c4, args.c5 = gamma_l ** 4 * scale * args.c3_rate, \
                  gamma_l ** 2 * gamma_u * scale * args.c4_rate, \
                  gamma_u ** 2 * scale * args.c5_rate
 
-    disc = f"c1-{args.c1:.2f}-c2-{args.c2:.1f}-c3-{args.c3:.1e}-c4-{args.c4:.1e}-c5-{args.c5:.1e}-gamma_l-{args.gamma_l:.2f}-r345-{args.c3_rate}-{args.c4_rate}-{args.c5_rate}"+ \
+    disc = f"c1-{args.c1:.2f}-c2-{args.c2:.1f}-c3-{args.c3:.1e}-c4-{args.c4:.1e}-c5-{args.c5:.1e}-gamma_l-{args.gamma_l:.2f}-gamma_u-{args.gamma_u:.2f}-r345-{args.c3_rate}-{args.c4_rate}-{args.c5_rate}"+ \
            f"-fdim-{args.proj_feat_dim}-went{args.went}-mm{args.momentum_proto}-lr{args.base_lr}-seed{args.seed}"
     args.log_dir = os.path.join(args.log_dir, 'in-progress-'+'{}'.format(date.today())+args.name+'-{}'.format(disc))
 
