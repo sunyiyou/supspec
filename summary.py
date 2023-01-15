@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import re
 
-root = 'log/'
+root = 'analysis/'
 dirs = os.listdir(root)
 
 head = ["arch", "dataset", "c1", "c2", "c3", "c4", "c5", "gamma_l", "gamma_u","r3", "r4", "r5", "featdim", "went", "mm", "lr", "seed"] + \

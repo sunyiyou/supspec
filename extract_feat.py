@@ -236,9 +236,22 @@ def eval_ckpt(args, ngpus_per_node, ptrain_fname, logger):
 
     # from train_linear import get_linear_acc
     # get_linear_acc(feat_log_train, label_log_train, feat_log_val, label_log_val, 100)
-    # 62
+    # # 62
+    #
+    # ftrain = normalizer(feat_log_train[label_log_train < 50]).astype(np.float32)
+    # ftest = normalizer(feat_log_val[label_log_val < 50]).astype(np.float32)
+    # food = normalizer(feat_log_val[label_log_val > 50]).astype(np.float32)
+    # import faiss
+    # index = faiss.IndexFlatL2(ftrain.shape[1])
+    # index.add(ftrain)
+    # D, _ = index.search(ftest, 10)
+    # scores_in = -D[:, -1]
+    # D, _ = index.search(food, 10)
+    # scores_ood_test = -D[:, -1]
+    # import tools.ood_metrics as metrics
+    # results = metrics.cal_metric(scores_in, scores_ood_test)
 
-
+    1/0
 
     from ylib.ytool import ArrayDataset
     trainset = ArrayDataset(feat_log_train, labels=label_log_train)

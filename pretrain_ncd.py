@@ -22,6 +22,23 @@ from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
+class kmeans2classsifier:
+    def __init__(self, estimator):
+        classifier_novel = estimator.cluster_centers_
+        self.w = 2 * classifier_novel  # Nu * fdim
+        self.b = -np.linalg.norm(classifier_novel, 2, 1) ** 2  # Nu
+    def predict(self, input):
+        out = np.matmul(input, self.w.T) + self.b
+        return out.argmax(1), out
+
+class emsemble:
+    def __init__(self, w1, w2, b1, b2, scale2=1, bias2=0):
+        self.w = np.concatenate([w1, scale2 * w2], axis=0)
+        self.b = np.concatenate([b1, bias2 * b2], axis=0)
+    def predict(self, input):
+        out = np.matmul(input, self.w.T) + self.b
+        return out.argmax(1), out
+
 def main(log_writer, log_file, device, args):
     iter_count = 0
 
@@ -113,7 +130,6 @@ def main(log_writer, log_file, device, args):
                 ))
 
 
-
         #######################  Evaluation #######################
         model.eval()
 
@@ -148,7 +164,7 @@ def main(log_writer, log_file, device, args):
 
             #######################  Linear Probe #######################
             # lp_acc, _ = get_linear_acc(ftrain, ltrain, ftest, ltest_n, args.labeled_num, print_ret=False)
-            lp_acc, (_, _, _, lp_preds_k) = get_linear_acc(ftrain_k, ltrain_k, ftest_k, ltest_k, args.labeled_num, print_ret=False)
+            lp_acc, (clf_known, _, _, lp_preds_k) = get_linear_acc(ftrain_k, ltrain_k, ftest_k, ltest_k, args.labeled_num, print_ret=False)
 
 
             #######################  K-Means #######################
@@ -162,12 +178,42 @@ def main(log_writer, log_file, device, args):
             targets_all = np.concatenate([ltest_k, ltest_n])
             kmeans_overall_acc = cluster_acc(kmeans_preds_all, targets_all)
 
+
+            #######################  Task Agnostic #######################
+            centers_novel = estimator.cluster_centers_
+            centroids = np.zeros((args.num_classes, ftrain_k.shape[1]))
+            for li in range(args.num_classes):
+                if li < args.labeled_num:
+                    centroids[li, :] = ftrain_k[ltrain_k == li].mean(0)
+                else:
+                    centroids[li, :] = centers_novel[li - args.labeled_num]
+            # centroids = normalizer(centroids)
+            preds_k = ((ftest_k - centroids[:, None, :]) ** 2).sum(2).argmin(0)
+            preds_n = ((ftest_n - centroids[:, None, :]) ** 2).sum(2).argmin(0)
+            seen_acc = (preds_k == ltest_k).sum() / len(ltest_k)
+            unseen_acc = cluster_acc(preds_n, ltest_n)
+            overall_acc = cluster_acc(np.concatenate([preds_k, preds_n]), targets_all)
+
+            # clf_novel = kmeans2classsifier(estimator)
+            # # verify # # kmeans_preds_test_n = ((ftest_n - classifier_novel[:, None, :]) ** 2).sum(2).argmin(0)
+            # # verify # # (kmeans_preds_test_n == clf_novel.predict(ftest_n)[0]).sum()
+            ### emsembling ###
+            # centers = estimator.cluster_centers_
+            # w_n = 2 * centers  # Nu * fdim
+            # b_n = -np.linalg.norm(centers, 2, 1) ** 2  # Nu
+            # w_k = clf_known.fc.weight.data.cpu().numpy()
+            # b_k = clf_known.fc.bias.data.cpu().numpy()
+            # w_k = w_k / np.linalg.norm(w_k, 2, 1).mean()
+            # b_k = b_k / np.linalg.norm(w_k, 2, 1).mean()
+            # clf_all = emsemble(w_k, w_n, b_k, b_n, scale2=1, bias2=0)
+            # preds_all, pred_logit = clf_all.predict(np.concatenate([ftest_k, ftest_n]))
+
             write_dict = {
                 'epoch': epoch,
                 'lr': lr_scheduler.get_lr(),
-                'overall_acc': 0,
-                'seen_acc': 0,
-                'unseen_acc': 0,
+                'overall_acc': overall_acc,
+                'seen_acc': seen_acc,
+                'unseen_acc': unseen_acc,
                 'kmeans_acc_train': kmeans_acc_train,
                 'kmeans_acc_test': kmeans_acc_test,
                 'kmeans_overall_acc': kmeans_overall_acc,
@@ -175,6 +221,7 @@ def main(log_writer, log_file, device, args):
             }
 
             print(f"K-Means Train Acc: {kmeans_acc_train:.4f}\t K-Means Test ACC: {kmeans_acc_test:.4f}\t K-Means All Acc: {kmeans_overall_acc:.4f}\t linear Probe Acc: {lp_acc:.4f}")
+            print(f"Seen Acc: {seen_acc:.4f}\t Unseen ACC: {unseen_acc:.4f}\t Overall Acc: {overall_acc:.4f}")
 
             log_writer.writerow(write_dict)
             log_file.flush()
@@ -230,9 +277,9 @@ def get_args():
     parser.add_argument('--eval_from', type=str, default=None)
     parser.add_argument('--hide_progress', action='store_true')
     parser.add_argument('--vis_freq', type=int, default=200)
-    parser.add_argument('--deep_eval_freq', type=int, default=50)
+    parser.add_argument('--deep_eval_freq', type=int, default=1)
     parser.add_argument('--print_freq', type=int, default=10)
-    parser.add_argument('--labeled-num', default=50, type=int)
+    parser.add_argument('--labeled-num', default=80, type=int)
     parser.add_argument('--labeled-ratio', default=1, type=float)
     # parser.add_argument('--c1', default=0.0002, type=float)
     # parser.add_argument('--c2', default=1.0, type=float)
@@ -278,7 +325,7 @@ def get_args():
                  gamma_l ** 2 * gamma_u * scale * args.c4_rate, \
                  gamma_u ** 2 * scale * args.c5_rate
 
-    disc = f"c1-{args.c1:.2f}-c2-{args.c2:.1f}-c3-{args.c3:.1e}-c4-{args.c4:.1e}-c5-{args.c5:.1e}-gamma_l-{args.gamma_l:.2f}-gamma_u-{args.gamma_u:.2f}-r345-{args.c3_rate}-{args.c4_rate}-{args.c5_rate}"+ \
+    disc = f"labelnum-{args.labeled_num}-c1-{args.c1:.2f}-c2-{args.c2:.1f}-c3-{args.c3:.1e}-c4-{args.c4:.1e}-c5-{args.c5:.1e}-gamma_l-{args.gamma_l:.2f}-gamma_u-{args.gamma_u:.2f}-r345-{args.c3_rate}-{args.c4_rate}-{args.c5_rate}"+ \
            f"-fdim-{args.proj_feat_dim}-went{args.went}-mm{args.momentum_proto}-lr{args.base_lr}-seed{args.seed}"
     args.log_dir = os.path.join(args.log_dir, 'in-progress-'+'{}'.format(date.today())+args.name+'-{}'.format(disc))
 

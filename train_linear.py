@@ -13,6 +13,7 @@ import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import copy
 
 from ylib.ytool import ArrayDataset
 cudnn.benchmark = True
@@ -26,6 +27,22 @@ class LinearClassifier(nn.Module):
     def forward(self, features):
         return self.fc(features)
 
+
+class NormedLinear(nn.Module):
+
+    def __init__(self, in_features, out_features, bn=False):
+        super(NormedLinear, self).__init__()
+        self.weight = nn.Parameter(torch.Tensor(in_features, out_features))
+        self.weight.data.uniform_(-1, 1).renorm_(2, 1, 1e-5).mul_(1e5)
+        self.bn = bn
+        if bn:
+            self.bn_layer = nn.BatchNorm1d(out_features)
+
+    def forward(self, x):
+        out = F.normalize(x, dim=1).mm(F.normalize(self.weight, dim=0))
+        if self.bn:
+            out = self.bn_layer(out)
+        return out
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -199,7 +216,7 @@ def validate(val_loader, classifier, criterion, print_freq):
     # print(' * Acc@1 {top1.avg:.3f}'.format(top1=top1))
     return losses.avg, top1.avg, preds
 
-def get_linear_acc(ftrain, ltrain, ftest, ltest, n_cls, epochs=50, args=None, classifier=None, print_ret=True):
+def get_linear_acc(ftrain, ltrain, ftest, ltest, n_cls, epochs=50, args=None, classifier=None, print_ret=True, normed=False):
 
     cluster2label = np.unique(ltrain)
     label2cluster = {li: ci for ci, li in enumerate(cluster2label)}
@@ -237,6 +254,7 @@ def get_linear_acc(ftrain, ltrain, ftest, ltest, n_cls, epochs=50, args=None, cl
     optimizer = set_optimizer(opt, classifier)
 
     best_preds = None
+    best_state = None
     # training routine
     for epoch in range(opt.start_epoch + 1, opt.epochs + 1):
         adjust_learning_rate(opt, optimizer, epoch)
@@ -251,11 +269,12 @@ def get_linear_acc(ftrain, ltrain, ftest, ltest, n_cls, epochs=50, args=None, cl
         if val_acc > best_acc:
             best_acc = val_acc
             best_preds = preds
-
+            best_state = copy.deepcopy(classifier.state_dict())
         # print('epoch {}, best accuracy: {:.2f}'.format(epoch, best_acc))
     if print_ret:
         print(f'{acc:.2f}\t{best_acc:.2f}', end='\t')
 
+    classifier.load_state_dict(best_state)
     return best_acc.item(), (classifier, cluster2label, label2cluster, best_preds)
 
 
