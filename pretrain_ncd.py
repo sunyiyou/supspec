@@ -277,7 +277,7 @@ def get_args():
     parser.add_argument('--eval_from', type=str, default=None)
     parser.add_argument('--hide_progress', action='store_true')
     parser.add_argument('--vis_freq', type=int, default=200)
-    parser.add_argument('--deep_eval_freq', type=int, default=1)
+    parser.add_argument('--deep_eval_freq', type=int, default=50)
     parser.add_argument('--print_freq', type=int, default=10)
     parser.add_argument('--labeled-num', default=80, type=int)
     parser.add_argument('--labeled-ratio', default=1, type=float)

@@ -87,6 +87,7 @@ class OPENWORLDCIFAR10(torchvision.datasets.CIFAR10):
                     self.targets.extend(entry['labels'])
                 else:
                     self.targets.extend(entry['fine_labels'])
+        self.targets = np.array(self.targets)
 
         self.data = np.vstack(self.data).reshape(-1, 3, 32, 32)
         self.data = self.data.transpose((0, 2, 3, 1))  # convert to HWC
@@ -94,11 +95,12 @@ class OPENWORLDCIFAR10(torchvision.datasets.CIFAR10):
         labeled_classes = range(labeled_num)
         np.random.seed(rand_number)
         
-        if labeled:
-            self.labeled_idxs, self.unlabeled_idxs = self.get_labeled_index(labeled_classes, labeled_ratio)
-            self.shrink_data(self.labeled_idxs)
-        else:
-            self.shrink_data(unlabeled_idxs)
+        if train:
+            if labeled:
+                self.labeled_idxs, self.unlabeled_idxs = self.get_labeled_index(labeled_classes, labeled_ratio)
+                self.shrink_data(self.labeled_idxs)
+            else:
+                self.shrink_data(unlabeled_idxs)
 
     def get_labeled_index(self, labeled_classes, labeled_ratio):
         labeled_idxs = []
