@@ -19,6 +19,8 @@ from ylib.ytool import cluster_acc
 
 from train_linear import get_linear_acc
 from PIL import ImageFile
+from sklearn import metrics
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
@@ -42,44 +44,53 @@ class emsemble:
 def main(log_writer, log_file, device, args):
     iter_count = 0
 
-
     import open_world_cifar as datasets
     dataroot = args.data_dir
     if args.dataset.name == 'cifar10':
-        train_set_known = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs))
-        train_set_novel = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
-        train_set_known_eval = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
-        train_set_novel_eval = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
-        test_set = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=False, train=False, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
-        test_set_known = datasets.data.Subset(test_set, np.arange(len(test_set))[test_set.targets < args.labeled_num])
-        test_set_novel = datasets.data.Subset(test_set, np.arange(len(test_set))[test_set.targets >= args.labeled_num])
+        train_set_l = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs))
+        train_set_u = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs), unlabeled_idxs=train_set_l.unlabeled_idxs)
+        eval_set_l = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
+        eval_set_u = datasets.OPENWORLDCIFAR10(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs), unlabeled_idxs=train_set_l.unlabeled_idxs)
         args.num_classes = 10
     elif args.dataset.name == 'cifar100':
-        train_set_known = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs))
-        train_set_novel = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
-        train_set_known_eval = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
-        train_set_novel_eval = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
-        test_set = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=False, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
-        test_set_known = datasets.data.Subset(test_set, np.arange(len(test_set))[test_set.targets < args.labeled_num])
-        test_set_novel = datasets.data.Subset(test_set, np.arange(len(test_set))[test_set.targets >= args.labeled_num])
+        train_set_l = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs))
+        train_set_u = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs), unlabeled_idxs=train_set_l.unlabeled_idxs)
+        eval_set_l = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
+        eval_set_u = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs), unlabeled_idxs=train_set_l.unlabeled_idxs)
         args.num_classes = 100
 
 
-    labeled_len = len(train_set_known)
-    unlabeled_len = len(train_set_novel)
+    labeled_len = len(train_set_l)
+    unlabeled_len = len(train_set_u)
     labeled_batch_size = int(args.train.batch_size * labeled_len / (labeled_len + unlabeled_len))
 
     # Initialize the splits
-    train_label_loader = torch.utils.data.DataLoader(train_set_known, batch_size=labeled_batch_size, shuffle=True, num_workers=4, drop_last=True)
-    train_unlabel_loader = torch.utils.data.DataLoader(train_set_novel, batch_size=args.train.batch_size - labeled_batch_size, shuffle=True, num_workers=4, drop_last=True)
-    train_loader_known_eval = torch.utils.data.DataLoader(train_set_known_eval, batch_size=100, shuffle=True, num_workers=2)
-    train_loader_novel_eval = torch.utils.data.DataLoader(train_set_novel_eval, batch_size=100, shuffle=True, num_workers=2)
-    test_loader_known = torch.utils.data.DataLoader(test_set_known, batch_size=100, shuffle=False, num_workers=2)
-    test_loader_novel = torch.utils.data.DataLoader(test_set_novel, batch_size=100, shuffle=False, num_workers=2)
+    train_label_loader = torch.utils.data.DataLoader(train_set_l, batch_size=labeled_batch_size, shuffle=True, num_workers=2, drop_last=True)
+    train_unlabel_loader = torch.utils.data.DataLoader(train_set_u, batch_size=args.train.batch_size - labeled_batch_size, shuffle=True, num_workers=2, drop_last=True)
+    test_label_loader = torch.utils.data.DataLoader(eval_set_l, batch_size=100, shuffle=False, num_workers=1)
+    test_unlabel_loader = torch.utils.data.DataLoader(eval_set_u, batch_size=100, shuffle=False, num_workers=1)
 
     # define model
     model = get_model(args.model, args).to(device)
     # model = torch.nn.DataParallel(model)
+
+    if args.dataset.name == 'cifar10':
+        state_dict = torch.load('./pretrained/spectral_cifar_10.pth.tar')['state_dict']
+    elif args.dataset.name == 'cifar100':
+        state_dict = torch.load('./pretrained/spectral_cifar_100.pth.tar')['state_dict']
+
+    state_dict = {k: v for k, v in state_dict.items() if 'encoder' not in k}
+    model.load_state_dict(state_dict, strict=False)
+    model.featdim = 1000
+
+
+
+    for name, param in model.named_parameters():
+        if 'proj' not in name and 'layer4' not in name:
+            param.requires_grad = False
+    # for name, param in model.named_parameters():
+    #     print(f"{name}: {param.requires_grad}")
+    model = model.to(device)
 
     # define optimizer
     optimizer = get_optimizer(
@@ -103,11 +114,12 @@ def main(log_writer, log_file, device, args):
     for epoch in range(0, args.train.stop_at_epoch):
         model.reset_stat()
 
-        #######################  Train #######################
         model.train()
+        #######################  Train #######################
         print("number of iters this epoch: {}".format(len(train_label_loader)))
         unlabel_loader_iter = cycle(train_unlabel_loader)
         for idx, ((x1, x2), target) in enumerate(train_label_loader):
+
             ((ux1, ux2), target_unlabeled) = next(unlabel_loader_iter)
             x1, x2, ux1, ux2, target, target_unlabeled = x1.to(device), x2.to(device), ux1.to(device), ux2.to(device), target.to(device), target_unlabeled.to(device)
 
@@ -134,6 +146,7 @@ def main(log_writer, log_file, device, args):
                 ))
 
 
+
         #######################  Evaluation #######################
         model.eval()
 
@@ -156,61 +169,64 @@ def main(log_writer, log_file, device, args):
 
             normalizer = lambda x: x / (np.linalg.norm(x, ord=2, axis=-1, keepdims=True) + 1e-10)
 
-            features_train_k, ltrain_k, _ = feat_extract(train_loader_known_eval, proto_type='known')
-            features_train_n, ltrain_n, _ = feat_extract(train_loader_novel_eval, proto_type='novel')
-            features_test_k, ltest_k, _ = feat_extract(test_loader_known, proto_type='known')
-            features_test_n, ltest_n, _ = feat_extract(test_loader_novel, proto_type='novel')
+            # features_train_l, ltrain_l, _ = feat_extract(train_label_loader, proto_type='known')
+            # features_train_u, ltrain_u, _ = feat_extract(train_unlabel_loader, proto_type='novel')
+            features_test_l, ltest_l, _ = feat_extract(test_label_loader, proto_type='known')
+            features_test_u, ltest_u, _ = feat_extract(test_unlabel_loader, proto_type='novel')
 
-            ftrain_k = normalizer(features_train_k)
-            ftrain_n = normalizer(features_train_n)
-            ftest_k = normalizer(features_test_k)
-            ftest_n = normalizer(features_test_n)
+            ftest_l = normalizer(features_test_l)
+            ftest_u = normalizer(features_test_u)
 
             #######################  Linear Probe #######################
             # lp_acc, _ = get_linear_acc(ftrain, ltrain, ftest, ltest_n, args.labeled_num, print_ret=False)
-            lp_acc, (clf_known, _, _, lp_preds_k) = get_linear_acc(ftrain_k, ltrain_k, ftest_k, ltest_k, args.labeled_num, print_ret=False)
+            # lp_acc, (clf_known, _, _, lp_preds_k) = get_linear_acc(ftrain_k, ltrain_k, ftest_k, ltest_k, args.labeled_num, print_ret=False)
 
 
             #######################  K-Means #######################
-            alg = KMeans(init="k-means++", n_clusters=args.num_classes - args.labeled_num, n_init=5, random_state=0)
-            estimator = alg.fit(ftrain_n)
-            kmeans_acc_train = cluster_acc(estimator.predict(ftrain_n), ltrain_n.astype(np.int64))
-            kmeans_preds_test_n = estimator.predict(ftest_n)
-            kmeans_acc_test = cluster_acc(kmeans_preds_test_n, ltest_n.astype(np.int64))
+            X = ftest_u
+            centroids_size = args.num_classes
+            centroids = np.zeros((centroids_size, 512))
+            for li in range(args.labeled_num):
+                centroids[li, :] = ftest_l[ltest_l == li].mean(0)
 
-            kmeans_preds_all = np.concatenate([lp_preds_k.astype(np.int32), kmeans_preds_test_n + args.labeled_num])
-            targets_all = np.concatenate([ltest_k, ltest_n])
-            kmeans_overall_acc = cluster_acc(kmeans_preds_all, targets_all)
+            import numpy.linalg as linalg
+            from copy import deepcopy
 
+            X = torch.Tensor(X).cuda()
+            centroids = torch.Tensor(centroids).cuda()
+            # K-Means++ initialization
+            for icls in range(args.labeled_num, centroids_size):
+                distances = torch.norm(X - centroids[:icls, None, :], dim=2)
+                idx_min = torch.argmin(distances, dim=0)
+                dist_min = distances[tuple(np.stack((idx_min.data.cpu().numpy(), np.arange(len(idx_min)))))]
+                imax = torch.argmax(dist_min) % len(X)
+                centroids[icls, :] = X[imax.item(), :]
+            # print(f"init done")
+            ndata = X.shape[0]
+            nfeature = X.shape[1]
+            centers_init = centroids
+            # Store new centers
+            centers = deepcopy(centers_init)
 
-            #######################  Task Agnostic #######################
-            centers_novel = estimator.cluster_centers_
-            centroids = np.zeros((args.num_classes, ftrain_k.shape[1]))
-            for li in range(args.num_classes):
-                if li < args.labeled_num:
-                    centroids[li, :] = ftrain_k[ltrain_k == li].mean(0)
-                else:
-                    centroids[li, :] = centers_novel[li - args.labeled_num]
-            # centroids = normalizer(centroids)
-            preds_k = ((ftest_k - centroids[:, None, :]) ** 2).sum(2).argmin(0)
-            preds_n = ((ftest_n - centroids[:, None, :]) ** 2).sum(2).argmin(0)
-            seen_acc = (preds_k == ltest_k).sum() / len(ltest_k)
-            unseen_acc = cluster_acc(preds_n, ltest_n)
-            overall_acc = cluster_acc(np.concatenate([preds_k, preds_n]), targets_all)
+            preds_kmeans = np.zeros(ndata)
+            for iter in range(100):
+                distances = torch.norm(X - centers[:, None, :], dim=2)
+                preds_kmeans = torch.argmin(distances, dim=0)
 
-            # clf_novel = kmeans2classsifier(estimator)
-            # # verify # # kmeans_preds_test_n = ((ftest_n - classifier_novel[:, None, :]) ** 2).sum(2).argmin(0)
-            # # verify # # (kmeans_preds_test_n == clf_novel.predict(ftest_n)[0]).sum()
-            ### emsembling ###
-            # centers = estimator.cluster_centers_
-            # w_n = 2 * centers  # Nu * fdim
-            # b_n = -np.linalg.norm(centers, 2, 1) ** 2  # Nu
-            # w_k = clf_known.fc.weight.data.cpu().numpy()
-            # b_k = clf_known.fc.bias.data.cpu().numpy()
-            # w_k = w_k / np.linalg.norm(w_k, 2, 1).mean()
-            # b_k = b_k / np.linalg.norm(w_k, 2, 1).mean()
-            # clf_all = emsemble(w_k, w_n, b_k, b_n, scale2=1, bias2=0)
-            # preds_all, pred_logit = clf_all.predict(np.concatenate([ftest_k, ftest_n]))
+                for icls in range(args.labeled_num, args.num_classes):
+                    if (preds_kmeans == icls).sum().item() > 0:
+                        centers[icls, :] = torch.mean(X[preds_kmeans == icls], dim=0)
+                # centers[icls, :] = torch.mean(torch.cat([X[preds_kmeans == icls], torch.Tensor(ftest_l)[ltest_l == icls].to(device)]), dim=0)
+                seen_mask = ltest_u < args.labeled_num
+                unseen_mask = ~seen_mask
+
+            preds = preds_kmeans.data.cpu().numpy().astype(int)
+            overall_acc = cluster_acc(preds, ltest_u)
+            seen_acc = accuracy(preds[seen_mask], ltest_u[seen_mask])
+            unseen_acc = cluster_acc(preds[unseen_mask], ltest_u[unseen_mask])
+            unseen_nmi = metrics.normalized_mutual_info_score(ltest_u[unseen_mask], preds[unseen_mask])
+            print(f"Seen Acc: {seen_acc:.4f}\t Unseen ACC: {unseen_acc:.4f}\t Overall Acc: {overall_acc:.4f}")
+
 
             write_dict = {
                 'epoch': epoch,
@@ -218,24 +234,24 @@ def main(log_writer, log_file, device, args):
                 'overall_acc': overall_acc,
                 'seen_acc': seen_acc,
                 'unseen_acc': unseen_acc,
-                'kmeans_acc_train': kmeans_acc_train,
-                'kmeans_acc_test': kmeans_acc_test,
-                'kmeans_overall_acc': kmeans_overall_acc,
-                'lp_acc': lp_acc
+                'unseen_nmi': unseen_nmi,
+                # 'kmeans_acc_train': kmeans_acc_train,
+                # 'kmeans_acc_test': kmeans_acc_test,
+                # 'kmeans_overall_acc': kmeans_overall_acc,
+                # 'lp_acc': lp_acc
             }
 
-            print(f"K-Means Train Acc: {kmeans_acc_train:.4f}\t K-Means Test ACC: {kmeans_acc_test:.4f}\t K-Means All Acc: {kmeans_overall_acc:.4f}\t linear Probe Acc: {lp_acc:.4f}")
-            print(f"Seen Acc: {seen_acc:.4f}\t Unseen ACC: {unseen_acc:.4f}\t Overall Acc: {overall_acc:.4f}")
+            # print(f"K-Means Train Acc: {kmeans_acc_train:.4f}\t K-Means Test ACC: {kmeans_acc_test:.4f}\t K-Means All Acc: {kmeans_overall_acc:.4f}\t linear Probe Acc: {lp_acc:.4f}")
 
             log_writer.writerow(write_dict)
             log_file.flush()
 
             #######################  Visualization #######################
             if (epoch + 1) % args.vis_freq == 0:
-                sampling_size = int(0.15 * len(ftrain_n))
-                rand_idx = np.random.choice(range(len(ftrain_n)), sampling_size, replace=False)
-                fvis = normalizer(ftrain_n)[rand_idx]
-                tvis = ltrain_n[rand_idx].astype(int)
+                sampling_size = int(0.15 * len(ftest_u))
+                rand_idx = np.random.choice(range(len(ftest_u)), sampling_size, replace=False)
+                fvis = normalizer(ftest_u)[rand_idx]
+                tvis = ftest_u[rand_idx].astype(int)
 
                 os.makedirs(os.path.join(args.log_dir, 'vis'), exist_ok=True)
                 plot_cluster(fvis, tvis,
@@ -267,7 +283,7 @@ def main(log_writer, log_file, device, args):
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config-file', default='configs/supspectral_resnet_mlp1000_norelu_cifar100.yaml', type=str)
+    parser.add_argument('-c', '--config-file', default='configs_openncd/supspectral_resnet_mlp1000_norelu_cifar100.yaml', type=str)
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--log_freq', type=int, default=100)
     parser.add_argument('--workers', type=int, default=32)
@@ -280,11 +296,12 @@ def get_args():
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
     parser.add_argument('--eval_from', type=str, default=None)
     parser.add_argument('--hide_progress', action='store_true')
-    parser.add_argument('--vis_freq', type=int, default=200)
-    parser.add_argument('--deep_eval_freq', type=int, default=50)
+    parser.add_argument('--vis_freq', type=int, default=10000)
+    parser.add_argument('--deep_eval_freq', type=int, default=5)
     parser.add_argument('--print_freq', type=int, default=10)
-    parser.add_argument('--labeled-num', default=80, type=int)
-    parser.add_argument('--labeled-ratio', default=1, type=float)
+    parser.add_argument('--labeled-num', default=50, type=int)
+    parser.add_argument('--labeled-ratio', default=0.5, type=float)
+
     # parser.add_argument('--c1', default=0.0002, type=float)
     # parser.add_argument('--c2', default=1.0, type=float)
     # parser.add_argument('--c3', default=1e-8, type=float)
@@ -356,7 +373,7 @@ def get_args():
     }
 
     log_file = open(os.path.join(args.log_dir, 'log.csv'), mode='w')
-    fieldnames = ['epoch', 'lr', 'unseen_acc', 'seen_acc', 'overall_acc', 'kmeans_acc_train', 'kmeans_acc_test', 'kmeans_overall_acc', 'lp_acc']
+    fieldnames = ['epoch', 'lr', 'unseen_acc', 'seen_acc', 'overall_acc', 'unseen_nmi',]    # 'kmeans_acc_train', 'kmeans_acc_test', 'kmeans_overall_acc', 'lp_acc']
     log_writer = csv.DictWriter(log_file, fieldnames=fieldnames)
     log_writer.writeheader()
 

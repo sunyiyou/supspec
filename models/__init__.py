@@ -20,7 +20,7 @@ def get_model(model_cfg, args=None):
     if model_cfg.name == 'spectral':
         if "mu" not in model_cfg.__dict__:
             model_cfg.mu = 1.0
-        model = Spectral(get_backbone(model_cfg.backbone, args.proj_feat_dim), mu=model_cfg.mu)
+        model = Spectral(get_backbone(model_cfg.backbone, args.proj_feat_dim), mu=model_cfg.mu, args=args)
     elif model_cfg.name == 'supspectral':
         if "mu" not in model_cfg.__dict__:
             model_cfg.mu = 1.0

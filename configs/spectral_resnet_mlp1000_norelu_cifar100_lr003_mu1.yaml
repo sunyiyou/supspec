@@ -9,6 +9,7 @@ model:
   name: spectral
   backbone: resnet18_cifar_variant1_mlp_norelu
   mu: 1
+  numclasses: 100
 
 train:
   optimizer: 

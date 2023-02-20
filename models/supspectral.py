@@ -52,13 +52,8 @@ class SupSpectral(nn.Module):
         mat_ll_s2 = mat_ll ** 2 * (1 - torch.diag(torch.ones(bsz_l)).to(device))
         mat_uu_s2 = mat_uu ** 2 * (1 - torch.diag(torch.ones(bsz_u)).to(device))
 
-
         c1, c2 = self.args.c1, self.args.c2
         c3, c4, c5 = self.args.c3, self.args.c4, self.args.c5
-
-        # scale = 500
-        # c1, c2 = 2 * gamma_l**2 * scale, 2 * gamma_u**2 * scale / bsz_u
-        # c3, c4, c5 = gamma_l**4 * scale, gamma_l**2 * gamma_u**2 * scale / bsz_u, gamma_u**4 * scale / bsz_u**2
 
         target_ = target.contiguous().view(-1, 1)
         pos_labeled_mask = torch.eq(target_, target_.T).to(device)

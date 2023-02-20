@@ -27,13 +27,15 @@ model_names = sorted(name for name in models.__dict__
 model_names += ['resnet18_cifar_variant1']
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--dataset', choices=['cifar100'], default='cifar100',
-                    help='Which dataset to evaluate on.')
+parser.add_argument('--dataset',  default='cifar10', help='Which dataset to evaluate on.')
+# parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18_cifar_variant1')
+# parser.add_argument('-n', '--name', default='resnet18_spectral_c100')
+# parser.add_argument('--dir', type=str, default='log/spectral/completed-2022-12-21spectral-resnet18-mlp1000-norelu-cifar100-lr003-mu1-log_freq:20', help='Directory where all of the runs are located.')
+# parser.add_argument('--specific_ckpts', default='latest_800.pth', nargs='*', help='filenames of specific checkpoints to evaluate')
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18_cifar_variant1')
-parser.add_argument('-n', '--name', default='resnet18_spectral_c100')
-parser.add_argument('--dir', type=str, default='log/spectral/completed-2022-12-21spectral-resnet18-mlp1000-norelu-cifar100-lr003-mu1-log_freq:20',
-                    help='Directory where all of the runs are located.')
-parser.add_argument('--specific_ckpts', default='latest_800.pth', nargs='*', help='filenames of specific checkpoints to evaluate')
+parser.add_argument('-n', '--name', default='resnet18_spectral_c10')
+parser.add_argument('--dir', type=str, default='log/completed-2023-01-17supspectral-resnet18-cifar10-labelnum-5-c1-0.00-c2-2.0-c3-0.0e+00-c4-0.0e+00-c5-1.0e+00-gamma_l-0.00-gamma_u-1.00-r345-0.0-0.0-1.0-fdim-1000-went0.0-mm0.9-lr0.05-seed0', help='Directory where all of the runs are located.')
+parser.add_argument('--specific_ckpts', default='latest_1200.pth', nargs='*', help='filenames of specific checkpoints to evaluate')
 
 parser.add_argument('-j', '--workers', default=32, type=int, metavar='N',
                     help='number of data loading workers (default: 32)')
@@ -214,19 +216,25 @@ def eval_ckpt(args, ngpus_per_node, ptrain_fname, logger):
     feat_log_val, label_log_val = extract('val', val_loader, model, args, FORCE_RUN=False)
     feat_log_train, label_log_train = extract('train', train_loader, model, args, FORCE_RUN=False)
 
+    if args.dataset == 'cifar100':
+        cluster = 50
+    else:
+        cluster = 5
+
+
     from sklearn.cluster import KMeans
     from ylib.ytool import cluster_acc
     normalizer = lambda x: x / (np.linalg.norm(x, ord=2, axis=-1, keepdims=True) + 1e-10)
-    alg = KMeans(init="k-means++", n_clusters=50, n_init=5, random_state=0)
+    alg = KMeans(init="k-means++", n_clusters=cluster, n_init=5, random_state=0)
 
-    ftrain = normalizer(feat_log_train[label_log_train < 50])
-    ltrain = label_log_train[label_log_train < 50]
+    ftrain = normalizer(feat_log_train[label_log_train < cluster])
+    ltrain = label_log_train[label_log_train < cluster]
     estimator = alg.fit(ftrain)
     feat_log_train_pred = estimator.predict(ftrain)
     cluster_acc(feat_log_train_pred, ltrain.astype(np.int64), print_ret=True)
 
-    ftrain = normalizer(feat_log_train[label_log_train >= 50])
-    ltrain = label_log_train[label_log_train >= 50]
+    ftrain = normalizer(feat_log_train[label_log_train >= cluster])
+    ltrain = label_log_train[label_log_train >= cluster]
     estimator = alg.fit(ftrain)
     feat_log_train_pred = estimator.predict(ftrain)
     cluster_acc(feat_log_train_pred, ltrain.astype(np.int64), print_ret=True)
