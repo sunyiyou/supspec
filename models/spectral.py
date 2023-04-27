@@ -50,6 +50,7 @@ class Spectral(nn.Module):
         z1, z2 = self.projector(f1), self.projector(f2)
         L, d_dict = D(z1, z2, mu=self.mu)
         return {'loss': L, 'd_dict': d_dict}
+
     def forward_eval(self, x, proto_type=None):
         feat = self.backbone.features(x)
         z = normalized_thresh(self.projector(self.backbone.heads(feat)))
@@ -57,6 +58,7 @@ class Spectral(nn.Module):
             "features": feat,
             "label_pseudo": torch.zeros(len(x)),
         }
+
     def forward_ncd(self, x1, x2, ux1, ux2, target, mu=1.0):
         x1 = torch.cat([x1, ux1], 0)
         x2 = torch.cat([x2, ux2], 0)
@@ -64,6 +66,7 @@ class Spectral(nn.Module):
         z1, z2 = self.projector(f1), self.projector(f2)
         L, d_dict = D(z1, z2, mu=self.mu)
         return {'loss': L, 'd_dict': d_dict}
+
     @torch.no_grad()
     def sync_prototype(self):
         pass

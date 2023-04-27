@@ -3,7 +3,7 @@ from .supspectral import SupSpectral
 import torch
 from .backbones import resnet18_cifar_variant1, resnet18_cifar_variant2
 from .backbones import resnet18_cifar_variant1_mlp1000_norelu, resnet18_cifar_variant1_mlp_norelu
-from .backbones import resnet50_mlp8192_norelu_3layer
+from .backbones import resnet50_mlp8192_norelu_3layer, resnet18_mlp1000_norelu
 
 
 def get_backbone(backbone, castrate=True, proj_feat_dim=1000):

@@ -29,6 +29,7 @@ class kmeans2classsifier:
         classifier_novel = estimator.cluster_centers_
         self.w = 2 * classifier_novel  # Nu * fdim
         self.b = -np.linalg.norm(classifier_novel, 2, 1) ** 2  # Nu
+
     def predict(self, input):
         out = np.matmul(input, self.w.T) + self.b
         return out.argmax(1), out
@@ -83,11 +84,11 @@ def main(log_writer, log_file, device, args):
     model.load_state_dict(state_dict, strict=False)
     model.featdim = 1000
 
-
-
     for name, param in model.named_parameters():
         if 'proj' not in name and 'layer4' not in name:
             param.requires_grad = False
+
+
     # for name, param in model.named_parameters():
     #     print(f"{name}: {param.requires_grad}")
     model = model.to(device)
@@ -225,8 +226,9 @@ def main(log_writer, log_file, device, args):
             seen_acc = accuracy(preds[seen_mask], ltest_u[seen_mask])
             unseen_acc = cluster_acc(preds[unseen_mask], ltest_u[unseen_mask])
             unseen_nmi = metrics.normalized_mutual_info_score(ltest_u[unseen_mask], preds[unseen_mask])
-            print(f"Seen Acc: {seen_acc:.4f}\t Unseen ACC: {unseen_acc:.4f}\t Overall Acc: {overall_acc:.4f}")
 
+            print(f"Seen Acc: {seen_acc:.4f}\t Unseen ACC: {unseen_acc:.4f}\t Overall Acc: {overall_acc:.4f}")
+            torch.cuda.empty_cache()
 
             write_dict = {
                 'epoch': epoch,

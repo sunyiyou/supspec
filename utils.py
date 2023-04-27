@@ -10,6 +10,16 @@ from torch.optim.lr_scheduler import LambdaLR
 import math
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.optimize import linear_sum_assignment
+
+class TransformTwice:
+    def __init__(self, transform):
+        self.transform = transform
+
+    def __call__(self, inp):
+        out1 = self.transform(inp)
+        out2 = self.transform(inp)
+        return out1, out2
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -261,3 +271,24 @@ def accuracy(output, target):
     num_correct = np.sum(output == target)
     res = num_correct / len(target)
     return res
+
+
+
+def cluster_acc(y_pred, y_true):
+    """
+    Calculate clustering accuracy. Require scikit-learn installed
+    # Arguments
+        y: true labels, numpy.array with shape `(n_samples,)`
+        y_pred: predicted labels, numpy.array with shape `(n_samples,)`
+    # Return
+        accuracy, in [0,1]
+    """
+    y_true = y_true.astype(np.int64)
+    assert y_pred.size == y_true.size
+    D = max(y_pred.max(), y_true.max()) + 1
+    w = np.zeros((D, D), dtype=np.int64)
+    for i in range(y_pred.size):
+        w[y_pred[i], y_true[i]] += 1
+    row_ind, col_ind = linear_sum_assignment(w.max() - w)
+
+    return w[row_ind, col_ind].sum() / y_pred.size

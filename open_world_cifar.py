@@ -14,9 +14,10 @@ from torchvision import transforms
 import itertools
 from torch.utils.data.sampler import Sampler
 
+
 class OPENWORLDCIFAR100(torchvision.datasets.CIFAR100):
 
-    def __init__(self, root, labeled=True, labeled_num=50, labeled_ratio=0.5, rand_number=0, transform=None, target_transform=None, train=True,
+    def __init__(self, root, labeled=True, labeled_num=50, labeled_ratio=0.5, rand_number=0, transform=None, target_transform=None, train=True, class_list=None,
                  download=False, unlabeled_idxs=None):
         super(OPENWORLDCIFAR100, self).__init__(root, train, transform, target_transform, download)
 
@@ -37,6 +38,17 @@ class OPENWORLDCIFAR100(torchvision.datasets.CIFAR100):
                 else:
                     self.targets.extend(entry['fine_labels'])
         self.targets = np.array(self.targets)
+
+        if class_list is not None:
+            known_idx = [self.class_to_idx[class_name] for class_name in class_list]
+            novel_idx = list(set(range(100)) - set(known_idx))
+
+            label_map = [None for _ in range(100)]
+            for new_idx, old_idx in enumerate(known_idx + novel_idx):
+                label_map[old_idx] = new_idx
+            # label_map = {old_idx:new_idx for new_idx, old_idx in enumerate(known_idx + novel_idx)}
+            self.targets = np.array(label_map)[self.targets]
+            print("target transformed")
 
         self.data = np.vstack(self.data).reshape(-1, 3, 32, 32)
         self.data = self.data.transpose((0, 2, 3, 1))  # convert to HWC

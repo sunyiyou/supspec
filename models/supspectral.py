@@ -34,11 +34,12 @@ class SupSpectral(nn.Module):
         self.backbone = backbone
         self.projector = projection_identity()
 
-        self.proto_num = self.args.dataset.numclasses - self.args.labeled_num
-        self.register_buffer("proto_known", normalizer(torch.randn((self.args.labeled_num, args.proj_feat_dim), dtype=torch.float)).to(args.device))
-        self.register_buffer("proto_novel", normalizer(torch.randn((self.proto_num, args.proj_feat_dim), dtype=torch.float)).to(args.device))
+        # self.proto_num = self.args.dataset.numclasses - self.args.labeled_num
+        # self.register_buffer("proto_known", normalizer(torch.randn((self.args.labeled_num, args.proj_feat_dim), dtype=torch.float)).to(args.device))
+        # self.register_buffer("proto_novel", normalizer(torch.randn((self.proto_num, args.proj_feat_dim), dtype=torch.float)).to(args.device))
+        self.proto_num = self.args.dataset.numclasses
+        self.register_buffer("proto", normalizer(torch.randn((self.args.dataset.numclasses, args.proj_feat_dim), dtype=torch.float)).to(args.device))
         self.register_buffer("label_stat", torch.zeros(self.proto_num, dtype=torch.int))
-
 
     def D(self, z1, z2, uz1, uz2, target, mu=1.0):
         device = z1.device
@@ -74,13 +75,15 @@ class SupSpectral(nn.Module):
                                                               "loss3": loss3 / mu, "loss4": loss4 / mu,
                                                               "loss5": loss5 / mu}
 
-    def forward_eval(self, x, proto_type='novel'):
+    def forward_eval(self, x, proto_type='all'):
         feat = self.backbone.features(x)
         z = normalized_thresh(self.projector(self.backbone.heads(feat)))
         if proto_type == 'novel':
             logit = z @ self.proto_novel.data.T
         elif proto_type == 'known':
             logit = z @ self.proto_known.data.T
+        elif proto_type == 'all':
+            logit = z @ self.proto.data.T
         prob = F.softmax(logit, dim=1)
         conf, pred = prob.max(1)
         return {
@@ -101,24 +104,34 @@ class SupSpectral(nn.Module):
 
         spec_loss, d_dict = self.D(z1, z2, uz1, uz2, target, mu=self.mu)
 
-        dist = uz1 @ self.proto_novel.data.T * 10
+        dist = uz1 @ self.proto.data.T * 10
         label_pseudo = dist.argmax(1)
         self.update_label_stat(label_pseudo)
-        rand_order = np.random.choice(len(label_pseudo), len(label_pseudo), replace=False)
-        self.update_prototype_lazy(uz1[rand_order], label_pseudo[rand_order], momemt=self.args.momentum_proto)
 
-        rand_order = np.random.choice(len(target), len(target), replace=False)
-        self.update_prototype(z1[rand_order], target[rand_order], momemt=self.args.momentum_proto)
+        # rand_order = np.random.choice(len(target), len(target), replace=False)
+        # self.update_prototype(z1[rand_order], target[rand_order], momemt=self.args.momentum_proto)
+        #
+        # rand_order = np.random.choice(len(label_pseudo), len(label_pseudo), replace=False)
+        # self.update_prototype_lazy(uz1[rand_order], label_pseudo[rand_order], momemt=self.args.momentum_proto)
 
-        ent_loss = self.entropy(torch.softmax(dist, dim=1).mean(0))
-        d_dict['loss_ent'] = ent_loss.item()
+        # label_concat = torch.cat([target, label_pseudo]).type(torch.int)
+        # updated_ind = torch.cat([torch.ones_like(target), (label_pseudo >= self.args.labeled_num)]).type(torch.bool)
+        # rand_order = np.random.choice(updated_ind.sum().item(), updated_ind.sum().item(), replace=False)
+        # feat_concat = torch.cat([z1, uz1], dim=0).detach()
+        # self.update_prototype_lazy(feat_concat[updated_ind][rand_order], label_concat[updated_ind][rand_order],
+        #                            momemt=self.args.momentum_proto)
+        #
+        # ent_loss = self.entropy(torch.softmax(dist, dim=1).mean(0))
+        # d_dict['loss_ent'] = ent_loss.item()
+        ent_loss = 0
+        d_dict['loss_ent'] = 0
 
         loss = spec_loss - self.args.went * ent_loss
         return {'loss': loss, 'd_dict': d_dict}
 
     @torch.no_grad()
     def sync_prototype(self):
-        self.proto_novel.data = self.proto_tmp.data
+        self.proto.data = self.proto_tmp.data
 
     @torch.no_grad()
     def reset_stat(self):
@@ -126,7 +139,7 @@ class SupSpectral(nn.Module):
 
 
     def update_prototype_lazy(self, feat, label, weight=None, momemt=0.9):
-        self.proto_tmp = self.proto_novel.clone().detach()
+        self.proto_tmp = self.proto.clone().detach()
         if weight is None:
             weight = torch.ones_like(label)
         for i, l in enumerate(label):
@@ -139,7 +152,10 @@ class SupSpectral(nn.Module):
             weight = torch.ones_like(label)
         for i, l in enumerate(label):
             alpha = 1 - (1. - momemt) * weight[i]
-            self.proto_known[l] = normalizer(alpha * self.proto_known[l].data + (1. - alpha) * feat[i])
+            self.proto[l] = normalizer(alpha * self.proto[l].data + (1. - alpha) * feat[i])
+
+
+
     @torch.no_grad()
     def update_label_stat(self, label):
         self.label_stat += label.bincount(minlength=self.proto_num).to(self.label_stat.device)

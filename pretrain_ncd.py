@@ -42,7 +42,6 @@ class emsemble:
 def main(log_writer, log_file, device, args):
     iter_count = 0
 
-
     import open_world_cifar as datasets
     dataroot = args.data_dir
     if args.dataset.name == 'cifar10':
@@ -55,11 +54,31 @@ def main(log_writer, log_file, device, args):
         test_set_novel = datasets.data.Subset(test_set, np.arange(len(test_set))[test_set.targets >= args.labeled_num])
         args.num_classes = 10
     elif args.dataset.name == 'cifar100':
-        train_set_known = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs))
-        train_set_novel = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
-        train_set_known_eval = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
-        train_set_novel_eval = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs), unlabeled_idxs=train_set_known.unlabeled_idxs)
-        test_set = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=False, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs))
+
+        known_class_division_1 = [
+            "beaver", "dolphin", "otter", "seal", "whale", "aquarium_fish", "flatfish", "ray", "shark", "trout",
+            "orchid", "poppy", "rose", "sunflower", "tulip", "bottle", "bowl", "can", "cup", "plate",
+            "apple", "mushroom", "orange", "pear", "sweet_pepper", "clock", "keyboard", "lamp",
+            "telephone", "television", "bed", "chair", "couch", "table", "wardrobe", "bee", "beetle", "butterfly",
+            "caterpillar", "cockroach", "bear", "leopard", "lion", "tiger", "wolf", "bridge", "castle", "house", "road",
+            "skyscraper"
+        ]
+
+        known_class_division_2 = [
+            "beaver", "dolphin", "otter", "aquarium_fish", "flatfish", "orchid", "poppy", "rose", "bottle",
+            "bowl", "apple", "mushroom", "orange", "clock", "keyboard", "bed", "chair", "couch", "bee", "beetle",
+            "bear", "leopard", "lion", "bridge", "castle", "cloud", "forest", "mountain", "camel", "cattle", "fox",
+            "porcupine", "possum", "crab", "lobster", "baby", "boy", "girl", "crocodile", "dinosaur", "hamster",
+            "mouse", "rabbit", "maple_tree", "oak_tree", "bicycle", "bus", "motorcycle", "lawn_mower", "rocket"
+        ]
+
+        class_list = known_class_division_2
+
+        train_set_known = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs), class_list=class_list)
+        train_set_novel = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=True, **args.aug_kwargs), class_list=class_list, unlabeled_idxs=train_set_known.unlabeled_idxs)
+        train_set_known_eval = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=True, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs), class_list=class_list)
+        train_set_novel_eval = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=True, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs), class_list=class_list, unlabeled_idxs=train_set_known.unlabeled_idxs)
+        test_set = datasets.OPENWORLDCIFAR100(root=dataroot, labeled=False, train=False, labeled_num=args.labeled_num, labeled_ratio=args.labeled_ratio, download=True, transform=get_aug(train=False, train_classifier=False, **args.aug_kwargs), class_list=class_list)
         test_set_known = datasets.data.Subset(test_set, np.arange(len(test_set))[test_set.targets < args.labeled_num])
         test_set_novel = datasets.data.Subset(test_set, np.arange(len(test_set))[test_set.targets >= args.labeled_num])
         args.num_classes = 100
@@ -283,7 +302,7 @@ def get_args():
     parser.add_argument('--vis_freq', type=int, default=200)
     parser.add_argument('--deep_eval_freq', type=int, default=50)
     parser.add_argument('--print_freq', type=int, default=10)
-    parser.add_argument('--labeled-num', default=80, type=int)
+    parser.add_argument('--labeled-num', default=50, type=int)
     parser.add_argument('--labeled-ratio', default=1, type=float)
     # parser.add_argument('--c1', default=0.0002, type=float)
     # parser.add_argument('--c2', default=1.0, type=float)

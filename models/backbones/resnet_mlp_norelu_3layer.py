@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-__all__ = ['resnet50_mlp2048_norelu_3layer', 'resnet50_mlp1024_norelu_3layer', 'resnet50_mlp4096_norelu_3layer', 'resnet50_mlp8192_norelu_3layer', 'resnet50_mlp16384_norelu_3layer']
+__all__ = ['resnet50_mlp2048_norelu_3layer', 'resnet50_mlp1024_norelu_3layer', 'resnet50_mlp4096_norelu_3layer', 'resnet50_mlp8192_norelu_3layer', 'resnet50_mlp16384_norelu_3layer', 'resnet18_mlp1000_norelu']
 
 
 def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
@@ -222,8 +222,31 @@ class ResNet_MLP(nn.Module):
     def forward(self, x, normalize_feature=False):
         return self._forward_impl(x, normalize_feature)
 
+    def features(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
 
-def _resnet(arch, block, layers, output_dim, **kwargs):
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        return x
+
+    def heads(self, x, normalize_feature=False):
+        x = self.proj_resnet_layer1(x)
+        x = self.proj_resnet_layer2(x)
+        x = self.proj_resnet_layer3(x)
+        if normalize_feature:
+            x = torch.nn.functional.normalize(x, dim=1)
+        x = self.fc(x)
+        return x
+
+def _resnet(arch, block, layers, output_dim, featdim=1000, **kwargs):
     model = ResNet_MLP(block, layers, output_dim, **kwargs)
     return model
 
@@ -419,6 +442,15 @@ def resnet50_mlp1024_norelu_3layer(**kwargs):
     return _resnet('resnet50_mlp2', Bottleneck, [3, 4, 6, 3], 1024,
                    **kwargs)
 
+def resnet18_mlp1000_norelu(**kwargs):
+    r"""ResNet-50 model from
+    `"Deep Residual Learning for Image Recognition" <https://arxiv.org/pdf/1512.03385.pdf>`_
+
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+        progress (bool): If True, displays a progress bar of the download to stderr
+    """
+    return _resnet('resnet18_mlp2', BasicBlock, [2, 2, 2, 2], 1000, **kwargs)
 
 def resnet50_mlp2048_norelu_3layer(**kwargs):
     r"""ResNet-50 model from
