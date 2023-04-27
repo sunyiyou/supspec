@@ -19,11 +19,23 @@ from ylib.ytool import cluster_acc
 import torchvision.transforms as transforms
 
 from train_linear import get_linear_acc
-from PIL import ImageFile
+from PIL import ImageFile, ImageFilter
 from sklearn import metrics
+import random
+
+class GaussianBlur(object):
+    """Gaussian blur augmentation in SimCLR https://arxiv.org/abs/2002.05709"""
+
+    def __init__(self, sigma=[.1, 2.]):
+        self.sigma = sigma
+
+    def __call__(self, x):
+        sigma = random.uniform(self.sigma[0], self.sigma[1])
+        x = x.filter(ImageFilter.GaussianBlur(radius=sigma))
+        return x
+
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-
 
 torch.backends.cudnn.benchmark=True
 
@@ -44,16 +56,29 @@ class emsemble:
     def predict(self, input):
         out = np.matmul(input, self.w.T) + self.b
         return out.argmax(1), out
+
 # sudo mount -o size=1000000000000 -o nr_inodes=1000000 -o noatime, nodiratime -o remount /dev/shm
 def main(log_writer, log_file, device, args):
     import open_world_imagenet as datasets
 
-    transform_train = transforms.Compose([
-                transforms.RandomResizedCrop(224, scale=(0.5, 1.0)),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-            ])
+    if args.aug == 'ez':
+        transform_train = transforms.Compose([
+                    transforms.RandomResizedCrop(224, scale=(0.5, 1.0)),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                ])
+    else:
+        transform_train = transforms.Compose([
+            transforms.RandomResizedCrop(224, scale=(0.2, 1.0)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.RandomApply([GaussianBlur([.1, 2.])], p=0.5),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
     transform_test = transforms.Compose([
                 transforms.Resize(256),
                 transforms.CenterCrop(224),
@@ -105,9 +130,9 @@ def main(log_writer, log_file, device, args):
     model.backbone.load_state_dict(state_dict, strict=False)
 
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!  Check !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    for name, param in model.named_parameters():
-        if 'proj' not in name and 'layer4' not in name:
-            param.requires_grad = False
+    # for name, param in model.named_parameters():
+    #     if 'proj' not in name and 'layer4' not in name:
+    #         param.requires_grad = False
 
 
     # for name, param in model.named_parameters():
@@ -365,6 +390,9 @@ def get_args():
     parser.add_argument('--momentum_proto', default=0.95, type=float)
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--base_lr', default=0.05, type=float)
+    parser.add_argument('--aug', default='ez', type=str)
+    parser.add_argument('--batch_size', default=384, type=int)
+
     args = parser.parse_args()
 
     with open(args.config_file, 'r') as f:
@@ -382,6 +410,7 @@ def get_args():
             args.eval.num_epochs = 1 # train only one epoch
         args.dataset.num_workers = 0
 
+    args.train.batch_size = args.batch_size
 
     assert not None in [args.log_dir, args.dataset_root, args.ckpt_dir, args.name]
 
