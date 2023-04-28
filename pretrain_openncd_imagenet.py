@@ -93,8 +93,9 @@ def main(log_writer, log_file, device, args):
     concat_set = datasets.ConcatDataset((train_label_set, train_unlabel_set))
     labeled_idxs = range(len(train_label_set))
     unlabeled_idxs = range(len(train_label_set), len(train_label_set)+len(train_unlabel_set))
-    batch_sampler = datasets.TwoStreamBatchSampler(labeled_idxs, unlabeled_idxs, args.train.batch_size, int(args.train.batch_size * len(train_unlabel_set) / (len(train_label_set) + len(train_unlabel_set))))
-
+    batch_sampler = datasets.TwoStreamBatchSampler(labeled_idxs, unlabeled_idxs, args.train.batch_size, args.train.batch_size // 4 * 3)
+    # print(int(args.train.batch_size * len(train_unlabel_set) / (len(train_label_set) + len(train_unlabel_set))))
+    1/0
     test_label_set = datasets.ImageNetDataset(root=args.dataset_root, anno_file='./data/ImageNet100_label_{}_{:.2f}.txt'.format(args.labeled_num, args.labeled_ratio), transform=transform_test)
     test_unlabel_set = datasets.ImageNetDataset(root=args.dataset_root, anno_file='./data/ImageNet100_unlabel_{}_{:.2f}.txt'.format(args.labeled_num, args.labeled_ratio), transform=transform_test)
 
@@ -203,11 +204,19 @@ def main(log_writer, log_file, device, args):
             if (idx + 1) % args.print_freq == 0:
                 prob_msg = "\t".join([f"{val * 100:.0f}" for val in
                                       list((module.label_stat / (1e-6 + module.label_stat.sum())).data.cpu().numpy())])
-
-                if args.model.name == 'spectral':
-                    loss1, loss2, loss3, loss4, loss5 = 0, data_dict["d_dict"]["loss2"].item(), 0, 0, data_dict["d_dict"]["loss5"].item()
+                if args.multigpu:
+                    if args.model.name == 'spectral':
+                        loss1, loss2, loss3, loss4, loss5 = 0, data_dict["d_dict"]["loss2"].mean().item(), 0, 0, data_dict["d_dict"]["loss5"].mean().item()
+                    else:
+                        loss1, loss2, loss3, loss4, loss5 = data_dict["d_dict"]["loss1"].mean().item(), data_dict["d_dict"]["loss2"].mean().item(), data_dict["d_dict"]["loss3"].mean().item(), data_dict["d_dict"]["loss4"].mean().item(), data_dict["d_dict"]["loss5"].mean().item()
                 else:
-                    loss1, loss2, loss3, loss4, loss5 = data_dict["d_dict"]["loss1"].item(), data_dict["d_dict"]["loss2"].item(), data_dict["d_dict"]["loss3"].item(), data_dict["d_dict"]["loss4"].item(), data_dict["d_dict"]["loss5"].item()
+                    if args.model.name == 'spectral':
+                        loss1, loss2, loss3, loss4, loss5 = 0, data_dict["d_dict"]["loss2"].item(), 0, 0, \
+                        data_dict["d_dict"]["loss5"].item()
+                    else:
+                        loss1, loss2, loss3, loss4, loss5 = data_dict["d_dict"]["loss1"].item(), data_dict["d_dict"][
+                            "loss2"].item(), data_dict["d_dict"]["loss3"].item(), data_dict["d_dict"]["loss4"].item(), \
+                        data_dict["d_dict"]["loss5"].item()
 
                 print('Train: [{0}][{1}/{2}]\t Loss_all {3:.3f} \tc1:{4:.2e}\tc2:{5:.3f}\tc3:{6:.2e}\tc4:{7:.2e}\tc5:{8:.3f}\t{9}'.format(
                     epoch, idx + 1, len(train_loader), loss.item(), loss1, loss2, loss3, loss4, loss5, prob_msg
