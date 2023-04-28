@@ -68,7 +68,7 @@ class Spectral(nn.Module):
         return {'loss': L, 'd_dict': d_dict}
 
     def forward(self, x1, x2, ux1, ux2, target, mu=1.0):
-        return self.forward_ncd(self, x1, x2, ux1, ux2, target, mu)
+        return self.forward_ncd(x1, x2, ux1, ux2, target, mu)
 
 
     @torch.no_grad()
