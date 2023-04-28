@@ -69,6 +69,7 @@ def main(log_writer, log_file, device, args):
                     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
                 ])
     else:
+        print('use hard aug')
         transform_train = transforms.Compose([
             transforms.RandomResizedCrop(224, scale=(0.2, 1.0)),
             transforms.RandomHorizontalFlip(),
@@ -130,14 +131,16 @@ def main(log_writer, log_file, device, args):
     model.backbone.load_state_dict(state_dict, strict=False)
 
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!  Check !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    # for name, param in model.named_parameters():
-    #     if 'proj' not in name and 'layer4' not in name:
-    #         param.requires_grad = False
+    for name, param in model.named_parameters():
+        if 'proj' not in name and 'layer4' not in name:
+            param.requires_grad = False
 
 
     # for name, param in model.named_parameters():
     #     print(f"{name}: {param.requires_grad}")
     model = model.to(device)
+    if args.multigpu:
+        model = torch.nn.DataParallel(model)
 
     # define optimizer
     optimizer = get_optimizer(
@@ -159,7 +162,13 @@ def main(log_writer, log_file, device, args):
         os.makedirs(ckpt_dir)
 
     for epoch in range(0, args.train.stop_at_epoch):
-        model.reset_stat()
+
+        if args.multigpu:
+            module = model.module
+        else:
+            module = model
+
+        module.reset_stat()
 
         model.train()
         #######################  Train #######################
@@ -182,18 +191,18 @@ def main(log_writer, log_file, device, args):
             ux2 = view2[labeled_idx:]
 
             model.zero_grad()
-            data_dict = model.forward_ncd(x1, x2, ux1, ux2, target, mu=args.model.mu)
+            data_dict = model(x1, x2, ux1, ux2, target, mu=args.model.mu)
             loss = data_dict['loss'].mean()
             loss.backward()
             optimizer.step()
             lr_scheduler.step()
             data_dict.update({'lr':lr_scheduler.get_lr()})
-            # model.sync_prototype()
+            # module.sync_prototype()
 
-            torch.cuda.empty_cache()
+            # torch.cuda.empty_cache()
             if (idx + 1) % args.print_freq == 0:
                 prob_msg = "\t".join([f"{val * 100:.0f}" for val in
-                                      list((model.label_stat / (1e-6 + model.label_stat.sum())).data.cpu().numpy())])
+                                      list((module.label_stat / (1e-6 + module.label_stat.sum())).data.cpu().numpy())])
 
                 if args.model.name == 'spectral':
                     loss1, loss2, loss3, loss4, loss5 = 0, data_dict["d_dict"]["loss2"].item(), 0, 0, data_dict["d_dict"]["loss5"].item()
@@ -208,6 +217,10 @@ def main(log_writer, log_file, device, args):
 
         #######################  Evaluation #######################
         model.eval()
+        if args.multigpu:
+            module = model.module
+        else:
+            module = model
 
         def feat_extract(loader, proto_type):
             targets = np.array([])
@@ -216,7 +229,7 @@ def main(log_writer, log_file, device, args):
             with torch.no_grad():
                 for idx, (x, labels) in enumerate(loader):
                     # feat = model.backbone.features(x.to(device, non_blocking=True))
-                    ret_dict = model.forward_eval(x.to(device, non_blocking=True), proto_type)
+                    ret_dict = module.forward_eval(x.to(device, non_blocking=True), proto_type)
                     pred = ret_dict['label_pseudo']
                     feat = ret_dict['features']
                     preds = np.append(preds, pred.cpu().numpy())
@@ -339,7 +352,7 @@ def main(log_writer, log_file, device, args):
             model_path = os.path.join(ckpt_dir, f"{epoch + 1}.pth")
             torch.save({
                 'epoch': epoch + 1,
-                'state_dict': model.state_dict()
+                'state_dict': module.state_dict()
             }, model_path)
             print(f"Model saved to {model_path}")
 
@@ -355,6 +368,16 @@ def main(log_writer, log_file, device, args):
 
 
 def get_args():
+    def str2bool(v):
+        if isinstance(v, bool):
+            return v
+        if v.lower() in ('yes', 'true', 't', 'y', '1'):
+            return True
+        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+            return False
+        else:
+            raise argparse.ArgumentTypeError('Boolean value expected.')
+
     parser = argparse.ArgumentParser()
     # parser.add_argument('-c', '--config-file', default='configs_openncd/supspectral_resnet50_mlp8192_norelu_imagenet.yaml', type=str)
     parser.add_argument('-c', '--config-file', default='configs_openncd/spectral_resnet50_mlp8192_imagenet.yaml', type=str)
@@ -392,7 +415,7 @@ def get_args():
     parser.add_argument('--base_lr', default=0.05, type=float)
     parser.add_argument('--aug', default='ez', type=str)
     parser.add_argument('--batch_size', default=384, type=int)
-
+    parser.add_argument('--multigpu', default=False, type=str2bool)
     args = parser.parse_args()
 
     with open(args.config_file, 'r') as f:

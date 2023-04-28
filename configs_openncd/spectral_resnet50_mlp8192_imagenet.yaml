@@ -1,4 +1,4 @@
-name: spectral-resnet50-mlp8192-norelu-3layer-imagenet-lr005-mu10-bs384-100eps
+name: spectral-resnet50-mlp8192-imagenet
 dataset: 
   name: imagenet
   image_size: 224

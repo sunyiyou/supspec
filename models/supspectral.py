@@ -93,6 +93,9 @@ class SupSpectral(nn.Module):
             "label_pseudo": pred,
         }
 
+    def forward(self, x1, x2, ux1, ux2, target, mu=1.0):
+        return self.forward_ncd(self, x1, x2, ux1, ux2, target, mu)
+
     def forward_ncd(self, x1, x2, ux1, ux2, target, mu=1.0):
         x = torch.cat([x1, x2, ux1, ux2], 0)
         z = self.projector(self.backbone(x))
