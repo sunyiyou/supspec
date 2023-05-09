@@ -34,9 +34,9 @@ class SupSpectral(nn.Module):
         self.backbone = backbone
         self.projector = projection_identity()
 
-        # self.proto_num = self.args.dataset.numclasses - self.args.labeled_num
-        # self.register_buffer("proto_known", normalizer(torch.randn((self.args.labeled_num, args.proj_feat_dim), dtype=torch.float)).to(args.device))
-        # self.register_buffer("proto_novel", normalizer(torch.randn((self.proto_num, args.proj_feat_dim), dtype=torch.float)).to(args.device))
+        self.proto_num = self.args.dataset.numclasses - self.args.labeled_num
+        self.register_buffer("proto_known", normalizer(torch.randn((self.args.labeled_num, args.proj_feat_dim), dtype=torch.float)).to(args.device))
+        self.register_buffer("proto_novel", normalizer(torch.randn((self.proto_num, args.proj_feat_dim), dtype=torch.float)).to(args.device))
         self.proto_num = self.args.dataset.numclasses
         self.register_buffer("proto", normalizer(torch.randn((self.args.dataset.numclasses, args.proj_feat_dim), dtype=torch.float)).to(args.device))
         self.register_buffer("label_stat", torch.zeros(self.proto_num, dtype=torch.int))
@@ -59,7 +59,8 @@ class SupSpectral(nn.Module):
         target_ = target.contiguous().view(-1, 1)
         pos_labeled_mask = torch.eq(target_, target_.T).to(device)
         cls_sample_count = pos_labeled_mask.sum(1)
-        loss1 = - c1 * torch.sum((mat_ll * pos_labeled_mask) / cls_sample_count ** 2)
+
+        loss1 = - c1 * torch.sum((mat_ll * pos_labeled_mask) / cls_sample_count ** 2)  # torch.zeros(1).to('cuda')
 
         pos_unlabeled_mask = torch.diag(torch.ones(bsz_u)).to(device)
         loss2 = - c2 * torch.sum(mat_uu * pos_unlabeled_mask) / bsz_u
@@ -117,15 +118,19 @@ class SupSpectral(nn.Module):
         # rand_order = np.random.choice(len(label_pseudo), len(label_pseudo), replace=False)
         # self.update_prototype_lazy(uz1[rand_order], label_pseudo[rand_order], momemt=self.args.momentum_proto)
 
-        # label_concat = torch.cat([target, label_pseudo]).type(torch.int)
-        # updated_ind = torch.cat([torch.ones_like(target), (label_pseudo >= self.args.labeled_num)]).type(torch.bool)
-        # rand_order = np.random.choice(updated_ind.sum().item(), updated_ind.sum().item(), replace=False)
-        # feat_concat = torch.cat([z1, uz1], dim=0).detach()
-        # self.update_prototype_lazy(feat_concat[updated_ind][rand_order], label_concat[updated_ind][rand_order],
-        #                            momemt=self.args.momentum_proto)
-        #
+        label_concat = torch.cat([target, label_pseudo]).type(torch.int)
+        updated_ind = torch.cat([torch.ones_like(target), (label_pseudo >= self.args.labeled_num)]).type(torch.bool)
+        rand_order = np.random.choice(updated_ind.sum().item(), updated_ind.sum().item(), replace=False)
+        feat_concat = torch.cat([z1, uz1], dim=0).detach()
+        self.update_prototype_lazy(feat_concat[updated_ind][rand_order], label_concat[updated_ind][rand_order],
+                                   momemt=self.args.momentum_proto)
+
+        # q = torch.Tensor([1 - self.args.labeled_ratio] * self.args.labeled_num + [1] * (100 - 50)).to(self.args.device)
+        # q = q / q.sum()
+        # ent_loss = self.entropy(torch.softmax(dist, dim=1).mean(0), q)
         # ent_loss = self.entropy(torch.softmax(dist, dim=1).mean(0))
         # d_dict['loss_ent'] = ent_loss.item()
+
         ent_loss = 0
         d_dict['loss_ent'] = 0
 
@@ -163,7 +168,8 @@ class SupSpectral(nn.Module):
     def update_label_stat(self, label):
         self.label_stat += label.bincount(minlength=self.proto_num).to(self.label_stat.device)
 
-    def entropy(self, x):
+
+    def entropy(self, x, q=1):
         """
         Helper function to compute the entropy over the batch
         input: batch w/ shape [b, num_classes]
@@ -171,7 +177,7 @@ class SupSpectral(nn.Module):
         """
         EPS = 1e-5
         x_ = torch.clamp(x, min=EPS)
-        b = x_ * torch.log(x_)
+        b = x_ * torch.log(x_ / q)
 
         if len(b.size()) == 2:  # Sample-wise entropy
             return - b.sum(dim=1).mean()

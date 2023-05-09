@@ -77,6 +77,7 @@ def main(log_writer, log_file, device, args):
 
     if args.dataset.name == 'cifar10':
         state_dict = torch.load('./pretrained/spectral_cifar_10.pth.tar')['state_dict']
+        state_dict.pop('label_stat', None)
     elif args.dataset.name == 'cifar100':
         state_dict = torch.load('./pretrained/spectral_cifar_100.pth.tar')['state_dict']
 
@@ -120,7 +121,6 @@ def main(log_writer, log_file, device, args):
         print("number of iters this epoch: {}".format(len(train_label_loader)))
         unlabel_loader_iter = cycle(train_unlabel_loader)
         for idx, ((x1, x2), target) in enumerate(train_label_loader):
-
             ((ux1, ux2), target_unlabeled) = next(unlabel_loader_iter)
             x1, x2, ux1, ux2, target, target_unlabeled = x1.to(device), x2.to(device), ux1.to(device), ux2.to(device), target.to(device), target_unlabeled.to(device)
 
@@ -181,7 +181,11 @@ def main(log_writer, log_file, device, args):
             #######################  Linear Probe #######################
             # lp_acc, _ = get_linear_acc(ftrain, ltrain, ftest, ltest_n, args.labeled_num, print_ret=False)
             # lp_acc, (clf_known, _, _, lp_preds_k) = get_linear_acc(ftrain_k, ltrain_k, ftest_k, ltest_k, args.labeled_num, print_ret=False)
-
+            # ftest = np.concatenate([ftest_l, ftest_u])
+            # ltest = np.concatenate([ltest_l, ltest_u])
+            # alg = KMeans(init="k-means++", n_clusters=10, n_init=5, random_state=0)
+            # estimator = alg.fit(ftest)
+            # print(cluster_acc(estimator.predict(ftest), ltest.astype(np.int64)))
 
             #######################  K-Means #######################
             X = ftest_u
@@ -285,7 +289,8 @@ def main(log_writer, log_file, device, args):
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config-file', default='configs_openncd/supspectral_resnet_mlp1000_norelu_cifar100.yaml', type=str)
+    # parser.add_argument('-c', '--config-file', default='configs_openncd/supspectral_resnet_mlp1000_norelu_cifar100.yaml', type=str)
+    parser.add_argument('-c', '--config-file', default='configs_openncd/supspectral_resnet_mlp1000_norelu_cifar10.yaml', type=str)
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--log_freq', type=int, default=100)
     parser.add_argument('--workers', type=int, default=32)
@@ -301,7 +306,7 @@ def get_args():
     parser.add_argument('--vis_freq', type=int, default=10000)
     parser.add_argument('--deep_eval_freq', type=int, default=5)
     parser.add_argument('--print_freq', type=int, default=10)
-    parser.add_argument('--labeled-num', default=50, type=int)
+    parser.add_argument('--labeled-num', default=5, type=int)
     parser.add_argument('--labeled-ratio', default=0.5, type=float)
 
     # parser.add_argument('--c1', default=0.0002, type=float)
