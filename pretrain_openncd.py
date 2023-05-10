@@ -172,11 +172,17 @@ def main(log_writer, log_file, device, args):
 
             # features_train_l, ltrain_l, _ = feat_extract(train_label_loader, proto_type='known')
             # features_train_u, ltrain_u, _ = feat_extract(train_unlabel_loader, proto_type='novel')
-            features_test_l, ltest_l, _ = feat_extract(test_label_loader, proto_type='known')
-            features_test_u, ltest_u, _ = feat_extract(test_unlabel_loader, proto_type='novel')
+            features_test_l, ltest_l, preds_l = feat_extract(test_label_loader, proto_type='all')
+            features_test_u, ltest_u, preds_u = feat_extract(test_unlabel_loader, proto_type='all')
 
             ftest_l = normalizer(features_test_l)
             ftest_u = normalizer(features_test_u)
+
+            seen_mask = ltest_u < args.labeled_num
+            unseen_mask = ~seen_mask
+            proto_overall_acc = cluster_acc(preds_u, ltest_u)
+            proto_seen_acc = accuracy(preds_u[seen_mask], ltest_u[seen_mask])
+            proto_unseen_acc = cluster_acc(preds_u[unseen_mask], ltest_u[unseen_mask])
 
             #######################  Linear Probe #######################
             # lp_acc, _ = get_linear_acc(ftrain, ltrain, ftest, ltest_n, args.labeled_num, print_ret=False)
@@ -222,8 +228,8 @@ def main(log_writer, log_file, device, args):
                     if (preds_kmeans == icls).sum().item() > 0:
                         centers[icls, :] = torch.mean(X[preds_kmeans == icls], dim=0)
                 # centers[icls, :] = torch.mean(torch.cat([X[preds_kmeans == icls], torch.Tensor(ftest_l)[ltest_l == icls].to(device)]), dim=0)
-                seen_mask = ltest_u < args.labeled_num
-                unseen_mask = ~seen_mask
+                # seen_mask = ltest_u < args.labeled_num
+                # unseen_mask = ~seen_mask
 
             preds = preds_kmeans.data.cpu().numpy().astype(int)
             overall_acc = cluster_acc(preds, ltest_u)
@@ -232,6 +238,7 @@ def main(log_writer, log_file, device, args):
             unseen_nmi = metrics.normalized_mutual_info_score(ltest_u[unseen_mask], preds[unseen_mask])
 
             print(f"Seen Acc: {seen_acc:.4f}\t Unseen ACC: {unseen_acc:.4f}\t Overall Acc: {overall_acc:.4f}")
+            print(f"Proto:   Seen Acc: {proto_seen_acc:.4f}\t Unseen ACC: {proto_unseen_acc:.4f}\t Overall Acc: {proto_overall_acc:.4f}")
             torch.cuda.empty_cache()
 
             write_dict = {
@@ -241,6 +248,9 @@ def main(log_writer, log_file, device, args):
                 'seen_acc': seen_acc,
                 'unseen_acc': unseen_acc,
                 'unseen_nmi': unseen_nmi,
+                'proto_overall_acc': proto_overall_acc,
+                'proto_seen_acc': proto_seen_acc,
+                'proto_unseen_acc': proto_unseen_acc,
                 # 'kmeans_acc_train': kmeans_acc_train,
                 # 'kmeans_acc_test': kmeans_acc_test,
                 # 'kmeans_overall_acc': kmeans_overall_acc,
@@ -304,7 +314,7 @@ def get_args():
     parser.add_argument('--eval_from', type=str, default=None)
     parser.add_argument('--hide_progress', action='store_true')
     parser.add_argument('--vis_freq', type=int, default=10000)
-    parser.add_argument('--deep_eval_freq', type=int, default=5)
+    parser.add_argument('--deep_eval_freq', type=int, default=2)
     parser.add_argument('--print_freq', type=int, default=10)
     parser.add_argument('--labeled-num', default=5, type=int)
     parser.add_argument('--labeled-ratio', default=0.5, type=float)
@@ -380,7 +390,7 @@ def get_args():
     }
 
     log_file = open(os.path.join(args.log_dir, 'log.csv'), mode='w')
-    fieldnames = ['epoch', 'lr', 'unseen_acc', 'seen_acc', 'overall_acc', 'unseen_nmi',]    # 'kmeans_acc_train', 'kmeans_acc_test', 'kmeans_overall_acc', 'lp_acc']
+    fieldnames = ['epoch', 'lr', 'unseen_acc', 'seen_acc', 'overall_acc', 'unseen_nmi', 'proto_unseen_acc', 'proto_seen_acc', 'proto_overall_acc',]    # 'kmeans_acc_train', 'kmeans_acc_test', 'kmeans_overall_acc', 'lp_acc']
     log_writer = csv.DictWriter(log_file, fieldnames=fieldnames)
     log_writer.writeheader()
 
