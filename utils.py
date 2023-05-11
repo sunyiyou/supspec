@@ -12,6 +12,31 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import linear_sum_assignment
 
+from PIL import ImageFilter
+import random
+
+
+class GaussianBlur(object):
+    """Gaussian blur augmentation in SimCLR https://arxiv.org/abs/2002.05709"""
+
+    def __init__(self, sigma=[.1, 2.]):
+        self.sigma = sigma
+
+    def __call__(self, x):
+        sigma = random.uniform(self.sigma[0], self.sigma[1])
+        x = x.filter(ImageFilter.GaussianBlur(radius=sigma))
+        return x
+
+
+def torch_l2_dis_batch(inp, cnt, bsz=1000):
+    ret = torch.zeros((cnt.shape[0], inp.shape[0])).to(inp.device)
+    iters = len(inp) // bsz
+    for i in range(iters + 1):
+        bg_ind = bsz * i
+        end_ind = min(bsz * (i + 1), len(inp))
+        ret[:, bg_ind:end_ind] = torch.norm(inp[bg_ind:end_ind] - cnt, dim=2)
+    return ret
+
 class TransformTwice:
     def __init__(self, transform):
         self.transform = transform
