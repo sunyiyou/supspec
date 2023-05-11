@@ -92,7 +92,8 @@ def main(log_writer, log_file, device, args):
 
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!  TOBE Replaced !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     model = get_model(args.model, args).to(device)
-    from torchvision.models.utils import load_state_dict_from_url
+    # from torchvision.models.utils import load_state_dict_from_url
+    from torch.utils.model_zoo import load_url as load_state_dict_from_url
     from torchvision.models.resnet import model_urls
     state_dict = load_state_dict_from_url(model_urls['resnet50'])
     # state_dict = load_state_dict_from_url(model_urls['resnet18'])  ######## !!!!!!!!!!!!!!!!!  change 512 to 2048     1000 to 8192 !!!!!!!!!!!!!!!!!
@@ -184,10 +185,6 @@ def main(log_writer, log_file, device, args):
                 print('Train: [{0}][{1}/{2}]\t Loss_all {3:.3f} \tc1:{4:.2e}\tc2:{5:.3f}\tc3:{6:.2e}\tc4:{7:.2e}\tc5:{8:.3f}\t{9}'.format(
                     epoch, idx + 1, len(train_loader), loss.item(), loss1, loss2, loss3, loss4, loss5, prob_msg
                 ))
-            break
-
-
-
 
         #######################  Evaluation #######################
         model.eval()
@@ -343,7 +340,7 @@ def get_args():
             return False
         else:
             raise argparse.ArgumentTypeError('Boolean value expected.')
-
+    #python3 pretrain_unsup_imagenet.py --dataset_root /run/user/1000/train100 --multigpu True --batch_size 128
     parser = argparse.ArgumentParser()
     # parser.add_argument('-c', '--config-file', default='configs_openncd/supspectral_resnet18_imagenet.yaml', type=str)
     # parser.add_argument('-c', '--config-file', default='configs_openncd/supspectral_resnet50_mlp8192_norelu_imagenet.yaml', type=str)
