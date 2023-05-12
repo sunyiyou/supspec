@@ -51,9 +51,15 @@ class Spectral(nn.Module):
     #     L, d_dict = D(z1, z2, mu=self.mu)
     #     return {'loss': L, 'd_dict': d_dict}
 
-    def forward_eval(self, x, proto_type=None):
-        feat = self.backbone.features(x)
-        z = normalized_thresh(self.projector(self.backbone.heads(feat)))
+    def forward_eval(self, x, proto_type=None, layer='penul'):
+        penul_feat = self.backbone.features(x)
+        proj_feat = normalized_thresh(self.projector(self.backbone.heads(penul_feat)))
+
+        if layer == 'penul':
+            feat = penul_feat
+        else:
+            feat = proj_feat
+
         return {
             "features": feat,
             "label_pseudo": torch.zeros(len(x)),

@@ -1,4 +1,3 @@
-from .spectral import Spectral
 from .supspectral import SupSpectral
 import torch
 from .backbones import resnet18_cifar_variant1, resnet18_cifar_variant2
@@ -20,7 +19,13 @@ def get_model(model_cfg, args=None):
     if model_cfg.name == 'spectral':
         if "mu" not in model_cfg.__dict__:
             model_cfg.mu = 1.0
+        from .spectral import Spectral
         model = Spectral(get_backbone(model_cfg.backbone, args.proj_feat_dim), mu=model_cfg.mu, args=args)
+    elif model_cfg.name == 'spectral_old':
+        if "mu" not in model_cfg.__dict__:
+            model_cfg.mu = 1.0
+        from .spectral_old import Spectral
+        model = Spectral(get_backbone(model_cfg.backbone), mu=model_cfg.mu)
     elif model_cfg.name == 'supspectral':
         if "mu" not in model_cfg.__dict__:
             model_cfg.mu = 1.0

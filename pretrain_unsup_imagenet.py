@@ -340,7 +340,7 @@ def get_args():
             return False
         else:
             raise argparse.ArgumentTypeError('Boolean value expected.')
-    #python3 pretrain_unsup_imagenet.py --dataset_root /run/user/1000/train100 --multigpu True --batch_size 128
+    #python3 pretrain_unsup_imagenet.py --dataset_root /run/user/1000/train100 --multigpu True --batch_size 256
     parser = argparse.ArgumentParser()
     # parser.add_argument('-c', '--config-file', default='configs_openncd/supspectral_resnet18_imagenet.yaml', type=str)
     # parser.add_argument('-c', '--config-file', default='configs_openncd/supspectral_resnet50_mlp8192_norelu_imagenet.yaml', type=str)
@@ -358,7 +358,7 @@ def get_args():
     parser.add_argument('--eval_from', type=str, default=None)
     parser.add_argument('--hide_progress', action='store_true')
     parser.add_argument('--vis_freq', type=int, default=100000)
-    parser.add_argument('--deep_eval_freq', type=int, default=10)
+    parser.add_argument('--deep_eval_freq', type=int, default=5)
     parser.add_argument('--print_freq', type=int, default=10)
     parser.add_argument('--labeled-num', default=50, type=int)
     parser.add_argument('--labeled-ratio', default=0.5, type=float)

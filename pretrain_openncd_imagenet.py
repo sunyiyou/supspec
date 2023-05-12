@@ -13,27 +13,14 @@ from models import get_model
 from datasets import get_dataset
 from optimizers import get_optimizer, LR_Scheduler
 from datetime import date
-from utils import plot_cluster, accuracy, TransformTwice, cluster_acc
+from utils import plot_cluster, accuracy, TransformTwice, cluster_acc, torch_l2_dis_batch, GaussianBlur
 from sklearn.cluster import KMeans
 from ylib.ytool import cluster_acc
 import torchvision.transforms as transforms
 
 from train_linear import get_linear_acc
-from PIL import ImageFile, ImageFilter
+from PIL import ImageFile
 from sklearn import metrics
-import random
-
-class GaussianBlur(object):
-    """Gaussian blur augmentation in SimCLR https://arxiv.org/abs/2002.05709"""
-
-    def __init__(self, sigma=[.1, 2.]):
-        self.sigma = sigma
-
-    def __call__(self, x):
-        sigma = random.uniform(self.sigma[0], self.sigma[1])
-        x = x.filter(ImageFilter.GaussianBlur(radius=sigma))
-        return x
-
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -61,24 +48,24 @@ class emsemble:
 def main(log_writer, log_file, device, args):
     import open_world_imagenet as datasets
 
-    if args.aug == 'ez':
-        transform_train = transforms.Compose([
-                    transforms.RandomResizedCrop(224, scale=(0.5, 1.0)),
-                    transforms.RandomHorizontalFlip(),
-                    transforms.ToTensor(),
-                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-                ])
-    else:
-        print('use hard aug')
-        transform_train = transforms.Compose([
-            transforms.RandomResizedCrop(224, scale=(0.2, 1.0)),
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
-            transforms.RandomGrayscale(p=0.2),
-            transforms.RandomApply([GaussianBlur([.1, 2.])], p=0.5),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
+    # if args.aug == 'ez':
+    #     transform_train = transforms.Compose([
+    #                 transforms.RandomResizedCrop(224, scale=(0.5, 1.0)),
+    #                 transforms.RandomHorizontalFlip(),
+    #                 transforms.ToTensor(),
+    #                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    #             ])
+    # else:
+    print('use hard aug')
+    transform_train = transforms.Compose([
+        transforms.RandomResizedCrop(224, scale=(0.2, 1.0)),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+        transforms.RandomGrayscale(p=0.2),
+        transforms.RandomApply([GaussianBlur([.1, 2.])], p=0.5),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
 
     transform_test = transforms.Compose([
                 transforms.Resize(256),
@@ -88,16 +75,15 @@ def main(log_writer, log_file, device, args):
             ])
 
 
-    train_label_set = datasets.ImageNetDataset(root=args.dataset_root, anno_file='./data/ImageNet100_label_{}_{:.2f}.txt'.format(args.labeled_num, args.labeled_ratio), transform=TransformTwice(transform_train))
-    train_unlabel_set = datasets.ImageNetDataset(root=args.dataset_root, anno_file='./data/ImageNet100_unlabel_{}_{:.2f}.txt'.format(args.labeled_num, args.labeled_ratio), transform=TransformTwice(transform_train))
+    train_label_set = datasets.ImageNetDataset(root=args.dataset_root, anno_file='./data/ImageNet{}_label_{}_{:.2f}.txt'.format(args.dataset.numclasses, args.labeled_num, args.labeled_ratio), transform=TransformTwice(transform_train))
+    train_unlabel_set = datasets.ImageNetDataset(root=args.dataset_root, anno_file='./data/ImageNet{}_unlabel_{}_{:.2f}.txt'.format(args.dataset.numclasses, args.labeled_num, args.labeled_ratio), transform=TransformTwice(transform_train))
     concat_set = datasets.ConcatDataset((train_label_set, train_unlabel_set))
     labeled_idxs = range(len(train_label_set))
     unlabeled_idxs = range(len(train_label_set), len(train_label_set)+len(train_unlabel_set))
     batch_sampler = datasets.TwoStreamBatchSampler(labeled_idxs, unlabeled_idxs, args.train.batch_size, args.train.batch_size // 4 * 3)
     # print(int(args.train.batch_size * len(train_unlabel_set) / (len(train_label_set) + len(train_unlabel_set))))
-    1/0
-    test_label_set = datasets.ImageNetDataset(root=args.dataset_root, anno_file='./data/ImageNet100_label_{}_{:.2f}.txt'.format(args.labeled_num, args.labeled_ratio), transform=transform_test)
-    test_unlabel_set = datasets.ImageNetDataset(root=args.dataset_root, anno_file='./data/ImageNet100_unlabel_{}_{:.2f}.txt'.format(args.labeled_num, args.labeled_ratio), transform=transform_test)
+    test_label_set = datasets.ImageNetDataset(root=args.dataset_root, anno_file='./data/ImageNet{}_label_{}_{:.2f}.txt'.format(args.dataset.numclasses, args.labeled_num, args.labeled_ratio), transform=transform_test)
+    test_unlabel_set = datasets.ImageNetDataset(root=args.dataset_root, anno_file='./data/ImageNet{}_unlabel_{}_{:.2f}.txt'.format(args.dataset.numclasses, args.labeled_num, args.labeled_ratio), transform=transform_test)
 
     num_workers = 8
     train_loader = torch.utils.data.DataLoader(concat_set, batch_sampler=batch_sampler, num_workers=num_workers)
@@ -120,15 +106,17 @@ def main(log_writer, log_file, device, args):
     # test_label_loader = torch.utils.data.DataLoader(eval_set_l, batch_size=100, shuffle=True, num_workers=num_workers)
     # test_unlabel_loader = torch.utils.data.DataLoader(eval_set_u, batch_size=100, shuffle=True, num_workers=num_workers)
 
-    # define model
-    model = get_model(args.model, args).to(device)
-
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!  TOBE Replaced !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    args.penul_feat_dim = 2048
     model = get_model(args.model, args).to(device)
     from torchvision.models.utils import load_state_dict_from_url
     from torchvision.models.resnet import model_urls
     state_dict = load_state_dict_from_url(model_urls['resnet50'])
+    # state_dict = load_state_dict_from_url(model_urls['resnet18'])  ######## !!!!!!!!!!!!!!!!!  change 512 to 2048     1000 to 8192 !!!!!!!!!!!!!!!!!
 
+    # state_dict = torch.load('./pretrained/simclr_imagenet_100.pth.tar')
+    # ckpt = torch.load('./pretrained/supcon_imagenet1k.pth')
+    # state_dict = {k.replace('module.encoder.', ''): v for k, v in ckpt['model'].items()}
     model.backbone.load_state_dict(state_dict, strict=False)
 
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!  Check !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -181,8 +169,9 @@ def main(log_writer, log_file, device, args):
             # x1, x2, ux1, ux2, target, target_unlabeled = x1.to(device), x2.to(device), ux1.to(device), ux2.to(
             #     device), target.to(device), target_unlabeled.to(device)
 
-        for idx, ((view1, view2), combined_target) in enumerate(train_loader):
+        for idx, ((view1, view2), combined_target, index) in enumerate(train_loader):
             labeled_idx =  batch_sampler.primary_batch_size
+            # target = index[:labeled_idx]
             target = combined_target[:labeled_idx]
             target_unlabeled = combined_target[labeled_idx:].to(device)
             view1, view2, target = view1.to(device), view2.to(device), target.to(device)
@@ -198,7 +187,7 @@ def main(log_writer, log_file, device, args):
             optimizer.step()
             lr_scheduler.step()
             data_dict.update({'lr':lr_scheduler.get_lr()})
-            # module.sync_prototype()
+            module.sync_prototype()
 
             # torch.cuda.empty_cache()
             if (idx + 1) % args.print_freq == 0:
@@ -224,6 +213,8 @@ def main(log_writer, log_file, device, args):
 
 
 
+
+
         #######################  Evaluation #######################
         model.eval()
         if args.multigpu:
@@ -231,52 +222,55 @@ def main(log_writer, log_file, device, args):
         else:
             module = model
 
-        def feat_extract(loader, proto_type):
+        def feat_extract(loader, proto_type, layer='penul'):
             targets = np.array([])
             features = []
             preds = np.array([])
             with torch.no_grad():
-                for idx, (x, labels) in enumerate(loader):
+                for idx, (x, labels, index) in enumerate(loader):
                     # feat = model.backbone.features(x.to(device, non_blocking=True))
-                    ret_dict = module.forward_eval(x.to(device, non_blocking=True), proto_type)
+                    ret_dict = module.forward_eval(x.to(device, non_blocking=True), proto_type, layer=layer)
                     pred = ret_dict['label_pseudo']
                     feat = ret_dict['features']
                     preds = np.append(preds, pred.cpu().numpy())
                     targets = np.append(targets, labels.cpu().numpy())
                     features.append(feat.data.cpu().numpy())
-                    # if idx > 50:
+                    # if idx > 20:
                     #     break
             return np.concatenate(features), targets.astype(int), preds
 
 
+        # if (epoch + 1) % 1 == 0:
         if (epoch + 1) % args.deep_eval_freq == 0:
 
             normalizer = lambda x: x / (np.linalg.norm(x, ord=2, axis=-1, keepdims=True) + 1e-10)
 
-            features_test_l, ltest_l, _ = feat_extract(test_label_loader, proto_type='all')
-            features_test_u, ltest_u, _ = feat_extract(test_unlabel_loader, proto_type='all')
+            features_test_u, ltest_u, preds_u = feat_extract(test_unlabel_loader, proto_type='all', layer=args.layer)
+            features_test_l, ltest_l, preds_l = feat_extract(test_label_loader, proto_type='all', layer=args.layer)
 
             ftest_l = normalizer(features_test_l)
             ftest_u = normalizer(features_test_u)
+
+            seen_mask = ltest_u < args.labeled_num
+            unseen_mask = ~seen_mask
+            proto_overall_acc = cluster_acc(preds_u, ltest_u)
+            proto_seen_acc = accuracy(preds_u[seen_mask], ltest_u[seen_mask])
+            proto_unseen_acc = cluster_acc(preds_u[unseen_mask], ltest_u[unseen_mask])
 
             #######################  Linear Probe #######################
             # lp_acc, _ = get_linear_acc(ftrain, ltrain, ftest, ltest_n, args.labeled_num, print_ret=False)
             # lp_acc, (clf_known, _, _, lp_preds_k) = get_linear_acc(ftrain_k, ltrain_k, ftest_k, ltest_k, args.labeled_num, print_ret=False)
 
-
-            def torch_l2_dis_batch(inp, cnt, bsz = 1000):
-                ret = torch.zeros((cnt.shape[0], inp.shape[0])).to(inp.device)
-                iters = len(inp) // bsz
-                for i in range(iters+1):
-                    bg_ind = bsz * i
-                    end_ind = min(bsz * (i + 1), len(inp))
-                    ret[:, bg_ind:end_ind] = torch.norm(inp[bg_ind:end_ind] - cnt, dim=2)
-                return ret
-
             #######################  K-Means #######################
+
+            if args.layer == 'penul':
+                featdim = args.penul_feat_dim
+            else:
+                featdim = args.proj_feat_dim
+
             X = ftest_u
             centroids_size = args.dataset.numclasses
-            centroids = np.zeros((centroids_size, 2048))
+            centroids = np.zeros((centroids_size, featdim))
             for li in range(args.labeled_num):
                 centroids[li, :] = ftest_l[ltest_l == li].mean(0)
 
@@ -293,6 +287,7 @@ def main(log_writer, log_file, device, args):
                 dist_min = distances[tuple(np.stack((idx_min.data.cpu().numpy(), np.arange(len(idx_min)))))]
                 imax = torch.argmax(dist_min) % len(X)
                 centroids[icls, :] = X[imax.item(), :]
+
             print(f"init done")
             ndata = X.shape[0]
             nfeature = X.shape[1]
@@ -311,8 +306,6 @@ def main(log_writer, log_file, device, args):
                     if (preds_kmeans == icls).sum().item() > 0:
                         centers[icls, :] = torch.mean(X[preds_kmeans == icls], dim=0)
                 # centers[icls, :] = torch.mean(torch.cat([X[preds_kmeans == icls], torch.Tensor(ftest_l)[ltest_l == icls].to(device)]), dim=0)
-                seen_mask = ltest_u < args.labeled_num
-                unseen_mask = ~seen_mask
 
             preds = preds_kmeans.data.cpu().numpy().astype(int)
             overall_acc = cluster_acc(preds, ltest_u)
@@ -320,12 +313,16 @@ def main(log_writer, log_file, device, args):
             unseen_acc = cluster_acc(preds[unseen_mask], ltest_u[unseen_mask])
             unseen_nmi = metrics.normalized_mutual_info_score(ltest_u[unseen_mask], preds[unseen_mask])
 
-            print(f"Seen Acc: {seen_acc:.4f}\t Unseen ACC: {unseen_acc:.4f}\t Overall Acc: {overall_acc:.4f}")
+            print(f"K-means: Seen Acc: {seen_acc:.4f}\t Unseen ACC: {unseen_acc:.4f}\t Overall Acc: {overall_acc:.4f}")
+            print(f"Proto:   Seen Acc: {proto_seen_acc:.4f}\t Unseen ACC: {proto_unseen_acc:.4f}\t Overall Acc: {proto_overall_acc:.4f}")
             torch.cuda.empty_cache()
 
             write_dict = {
                 'epoch': epoch,
                 'lr': lr_scheduler.get_lr(),
+                'proto_overall_acc': proto_overall_acc,
+                'proto_seen_acc': proto_seen_acc,
+                'proto_unseen_acc': proto_unseen_acc,
                 'overall_acc': overall_acc,
                 'seen_acc': seen_acc,
                 'unseen_acc': unseen_acc,
@@ -388,8 +385,9 @@ def get_args():
             raise argparse.ArgumentTypeError('Boolean value expected.')
 
     parser = argparse.ArgumentParser()
-    # parser.add_argument('-c', '--config-file', default='configs_openncd/supspectral_resnet50_mlp8192_norelu_imagenet.yaml', type=str)
-    parser.add_argument('-c', '--config-file', default='configs_openncd/spectral_resnet50_mlp8192_imagenet.yaml', type=str)
+    # parser.add_argument('-c', '--config-file', default='configs_openncd/supspectral_resnet18_imagenet.yaml', type=str)
+    parser.add_argument('-c', '--config-file', default='configs_openncd/supspectral_resnet50_mlp8192_norelu_imagenet100.yaml', type=str)
+    # parser.add_argument('-c', '--config-file', default='configs_openncd/spectral_resnet50_mlp8192_imagenet.yaml', type=str)
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--log_freq', type=int, default=100)
     parser.add_argument('--workers', type=int, default=4)
@@ -418,13 +416,16 @@ def get_args():
     parser.add_argument('--c4_rate', default=2, type=float)
     parser.add_argument('--c5_rate', default=1, type=float)
     parser.add_argument('--proj_feat_dim', default=8192, type=int)
+    parser.add_argument('--layer', default='penul', type=str)
+
     parser.add_argument('--went', default=0.0, type=float)
     parser.add_argument('--momentum_proto', default=0.95, type=float)
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--base_lr', default=0.05, type=float)
-    parser.add_argument('--aug', default='ez', type=str)
+    parser.add_argument('--aug', default='hard', type=str)
     parser.add_argument('--batch_size', default=384, type=int)
     parser.add_argument('--multigpu', default=False, type=str2bool)
+    parser.add_argument('--epochs', default=101, type=float)
     args = parser.parse_args()
 
     with open(args.config_file, 'r') as f:
@@ -443,6 +444,9 @@ def get_args():
         args.dataset.num_workers = 0
 
     args.train.batch_size = args.batch_size
+    args.train.stop_at_epoch = args.epochs
+    args.train.num_epochs = args.epochs
+    args.train.base_lr = args.base_lr
 
     assert not None in [args.log_dir, args.dataset_root, args.ckpt_dir, args.name]
 
@@ -481,7 +485,7 @@ def get_args():
     }
 
     log_file = open(os.path.join(args.log_dir, 'log.csv'), mode='w')
-    fieldnames = ['epoch', 'lr', 'unseen_acc', 'seen_acc', 'overall_acc', 'unseen_nmi',]    # 'kmeans_acc_train', 'kmeans_acc_test', 'kmeans_overall_acc', 'lp_acc']
+    fieldnames = ['epoch', 'lr', 'unseen_acc', 'seen_acc', 'overall_acc', 'proto_unseen_acc', 'proto_seen_acc', 'proto_overall_acc', 'unseen_nmi',]    # 'kmeans_acc_train', 'kmeans_acc_test', 'kmeans_overall_acc', 'lp_acc']
     log_writer = csv.DictWriter(log_file, fieldnames=fieldnames)
     log_writer.writeheader()
 

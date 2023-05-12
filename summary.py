@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import re
 
-root = 'analysis/'
+root = '/home/sunyiyou/Downloads/log'
 dirs = os.listdir(root)
 
 head = ["arch", "dataset", "labelnum", "c1", "c2", "c3", "c4", "c5", "gamma_l", "gamma_u","r3", "r4", "r5", "featdim", "went", "mm", "lr", "seed"] + \
@@ -16,7 +16,8 @@ for dirname in dirs:
         # arch, dataset, c1, c2, c3, c4, c5, gamma_l, r3, r4, r5, featdim, went, mm, seed = train_match[0]
         try:
             df = pd.read_csv(os.path.join(root, dirname, 'log.csv'))
-            data = df.iloc[df['kmeans_acc_test'].argmax()].to_dict()
+            # data = df.iloc[df['kmeans_acc_test'].argmax()].to_dict()
+            data = df.iloc[df['overall_acc'].argmax()].to_dict()
             datamsg = [f"{i}" for i in train_match[0]] + [f"{v}" for k, v in data.items()]
             print("\t".join(datamsg))
         except pd.errors.EmptyDataError:

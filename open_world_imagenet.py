@@ -68,7 +68,7 @@ class ImageNetDataset(data.Dataset):
             sample = self.transform(sample)
         if self.target_transform is not None:
             target = self.target_transform(target)
-        return sample, target
+        return sample, target, index
 
     def __len__(self):
         return len(self.targets)

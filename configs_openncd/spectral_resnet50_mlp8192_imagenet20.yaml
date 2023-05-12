@@ -3,13 +3,13 @@ dataset:
   name: imagenet
   image_size: 224
   num_workers: 32
-  numclasses: 100
+  numclasses: 20
 
 model: 
   name: spectral
   backbone: resnet50_mlp8192_norelu_3layer
   mu: 10
-  numclasses: 100
+  numclasses: 20
 
 train:
   optimizer: 

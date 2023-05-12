@@ -100,6 +100,17 @@ def main(log_writer, log_file, device, args):
     model = get_model(args.model, args).to(device)
     # model = torch.nn.DataParallel(model)
 
+    # if args.dataset.name == 'cifar10':
+    #     # state_dict = torch.load('./pretrained/spectral_cifar_10.pth.tar')['state_dict']
+    #     path = "/media/sunyiyou/ubuntu-hdd1/Downloads/spectral_contrastive_learning/log/awslog/completed-2023-05-09spectral-resnet18-mlp1000-norelu-cifar10-lr003-mu1-labelnum-5-c1-0.04-c2-4.0-c3-5.1e-04-c4-9.0e-02-c5-4.0e+00-gamma_l-0.15-gamma_u-2.00-r345-1-2-1-fdim-1000-went0.0-mm0.95-lr0.03-seed6/checkpoints/1200.pth"
+    #     state_dict = torch.load(path)['state_dict']
+    #     state_dict.pop('label_stat', None)
+    # elif args.dataset.name == 'cifar100':
+    #     state_dict = torch.load('./pretrained/spectral_cifar_100.pth.tar')['state_dict']
+    # state_dict = {k: v for k, v in state_dict.items() if 'encoder' not in k}
+    # model.load_state_dict(state_dict, strict=False)
+    # model.featdim = 1000
+    #
     # define optimizer
     optimizer = get_optimizer(
         args.train.optimizer.name, model, 
@@ -286,7 +297,8 @@ def main(log_writer, log_file, device, args):
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config-file', default='configs/supspectral_resnet_mlp1000_norelu_cifar100.yaml', type=str)
+    # parser.add_argument('-c', '--config-file', default='configs/supspectral_resnet_mlp1000_norelu_cifar100.yaml', type=str)
+    parser.add_argument('-c', '--config-file', default='configs/spectral_resnet_mlp1000_norelu_cifar10_lr003_mu1.yaml', type=str)
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--log_freq', type=int, default=100)
     parser.add_argument('--workers', type=int, default=32)
@@ -299,10 +311,10 @@ def get_args():
     parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu')
     parser.add_argument('--eval_from', type=str, default=None)
     parser.add_argument('--hide_progress', action='store_true')
-    parser.add_argument('--vis_freq', type=int, default=200)
+    parser.add_argument('--vis_freq', type=int, default=2000)
     parser.add_argument('--deep_eval_freq', type=int, default=50)
     parser.add_argument('--print_freq', type=int, default=10)
-    parser.add_argument('--labeled-num', default=50, type=int)
+    parser.add_argument('--labeled-num', default=5, type=int)
     parser.add_argument('--labeled-ratio', default=1, type=float)
     # parser.add_argument('--c1', default=0.0002, type=float)
     # parser.add_argument('--c2', default=1.0, type=float)

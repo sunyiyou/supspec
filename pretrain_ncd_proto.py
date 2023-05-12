@@ -218,7 +218,7 @@ def main(log_writer, log_file, device, args):
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config-file', default='configs/supspectral_resnet_mlp1000_norelu_cifar100_lr003_mu1.yaml', type=str)
+    parser.add_argument('-c', '--config-file', default='configs/supspectral_resnet_mlp1000_norelu_cifar100.yaml', type=str)
     parser.add_argument('--debug', action='store_true')
     parser.add_argument('--log_freq', type=int, default=100)
     parser.add_argument('--workers', type=int, default=32)

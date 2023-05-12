@@ -40,7 +40,8 @@ def main(log_writer, log_file, device, args):
     )
 
     # define model
-    model = get_model(args.model).to(device)
+    args.model.name = 'spectral_old'
+    model = get_model(args.model, args).to(device)
     model = torch.nn.DataParallel(model)
 
     # define optimizer
