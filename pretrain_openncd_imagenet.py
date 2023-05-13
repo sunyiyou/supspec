@@ -110,13 +110,17 @@ def main(log_writer, log_file, device, args):
     args.penul_feat_dim = 2048
     model = get_model(args.model, args).to(device)
     from torchvision.models.utils import load_state_dict_from_url
-    from torchvision.models.resnet import model_urls
-    state_dict = load_state_dict_from_url(model_urls['resnet50'])
+    # from torchvision.models.resnet import model_urls
+    # state_dict = load_state_dict_from_url(model_urls['resnet50'])
     # state_dict = load_state_dict_from_url(model_urls['resnet18'])  ######## !!!!!!!!!!!!!!!!!  change 512 to 2048     1000 to 8192 !!!!!!!!!!!!!!!!!
 
     # state_dict = torch.load('./pretrained/simclr_imagenet_100.pth.tar')
+
     # ckpt = torch.load('./pretrained/supcon_imagenet1k.pth')
     # state_dict = {k.replace('module.encoder.', ''): v for k, v in ckpt['model'].items()}
+
+    ckpt = torch.load('./pretrained/spectral_imagenet_100.pth')
+    state_dict = {k.replace('module.backbone.', ''): v for k, v in ckpt['state_dict'].items()}
     model.backbone.load_state_dict(state_dict, strict=False)
 
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!  Check !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -210,10 +214,6 @@ def main(log_writer, log_file, device, args):
                 print('Train: [{0}][{1}/{2}]\t Loss_all {3:.3f} \tc1:{4:.2e}\tc2:{5:.3f}\tc3:{6:.2e}\tc4:{7:.2e}\tc5:{8:.3f}\t{9}'.format(
                     epoch, idx + 1, len(train_loader), loss.item(), loss1, loss2, loss3, loss4, loss5, prob_msg
                 ))
-
-
-
-
 
         #######################  Evaluation #######################
         model.eval()
@@ -416,7 +416,7 @@ def get_args():
     parser.add_argument('--c4_rate', default=2, type=float)
     parser.add_argument('--c5_rate', default=1, type=float)
     parser.add_argument('--proj_feat_dim', default=8192, type=int)
-    parser.add_argument('--layer', default='penul', type=str)
+    parser.add_argument('--layer', default='proj', type=str)
 
     parser.add_argument('--went', default=0.0, type=float)
     parser.add_argument('--momentum_proto', default=0.95, type=float)
