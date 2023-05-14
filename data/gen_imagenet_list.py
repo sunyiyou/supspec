@@ -5,11 +5,11 @@ folders =  'n01558993 n01601694 n01669191 n01751748 n01755581 n01756291 n0177039
 folders = folders.split(' ')
 IMG_EXTENSIONS = ['jpg', 'jpeg', 'JPG', 'JPEG']
 
-# new_root = "/home/sunyiyou/dataset/ILSVRC-2012/train100"
-# root = '/home/sunyiyou/dataset/ILSVRC-2012/train'
-#
-# for folder in folders:
-#     stream = os.popen(f'scp -r {root}/{folder} {new_root}')
+new_root = "/home/sunyiyou/dataset/ILSVRC-2012/train100"
+root = '/home/sunyiyou/dataset/ILSVRC-2012/train'
+
+for folder in folders:
+    stream = os.popen(f'scp -r {root}/{folder} {new_root}')
 
 1/0
 

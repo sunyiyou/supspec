@@ -147,7 +147,7 @@ class SupSpectral(nn.Module):
         # d_dict['loss_ent'] = ent_loss.item()
 
         ent_loss = 0
-        d_dict['loss_ent'] = 0
+        # d_dict['loss_ent'] = 0
 
         loss = spec_loss - self.args.went * ent_loss
         return {'loss': loss, 'd_dict': d_dict}

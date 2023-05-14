@@ -48,14 +48,6 @@ class emsemble:
 def main(log_writer, log_file, device, args):
     import open_world_imagenet as datasets
 
-    # if args.aug == 'ez':
-    #     transform_train = transforms.Compose([
-    #                 transforms.RandomResizedCrop(224, scale=(0.5, 1.0)),
-    #                 transforms.RandomHorizontalFlip(),
-    #                 transforms.ToTensor(),
-    #                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    #             ])
-    # else:
     print('use hard aug')
     transform_train = transforms.Compose([
         transforms.RandomResizedCrop(224, scale=(0.2, 1.0)),
@@ -106,10 +98,9 @@ def main(log_writer, log_file, device, args):
     # test_label_loader = torch.utils.data.DataLoader(eval_set_l, batch_size=100, shuffle=True, num_workers=num_workers)
     # test_unlabel_loader = torch.utils.data.DataLoader(eval_set_u, batch_size=100, shuffle=True, num_workers=num_workers)
 
-    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!  TOBE Replaced !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     args.penul_feat_dim = 2048
     model = get_model(args.model, args).to(device)
-    from torchvision.models.utils import load_state_dict_from_url
+    # from torch.utils.model_zoo import load_url as load_state_dict_from_url
     # from torchvision.models.resnet import model_urls
     # state_dict = load_state_dict_from_url(model_urls['resnet50'])
     # state_dict = load_state_dict_from_url(model_urls['resnet18'])  ######## !!!!!!!!!!!!!!!!!  change 512 to 2048     1000 to 8192 !!!!!!!!!!!!!!!!!
@@ -120,7 +111,9 @@ def main(log_writer, log_file, device, args):
     # state_dict = {k.replace('module.encoder.', ''): v for k, v in ckpt['model'].items()}
 
     ckpt = torch.load('./pretrained/spectral_imagenet_100.pth')
-    state_dict = {k.replace('module.backbone.', ''): v for k, v in ckpt['state_dict'].items()}
+    state_dict = {k.replace('backbone.', ''): v for k, v in ckpt['state_dict'].items()}
+    if args.proj_feat_dim < 8192:
+        state_dict = {k: v for k, v in ckpt['state_dict'].items() if 'proj' not in k}
     model.backbone.load_state_dict(state_dict, strict=False)
 
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!  Check !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -131,6 +124,7 @@ def main(log_writer, log_file, device, args):
 
     # for name, param in model.named_parameters():
     #     print(f"{name}: {param.requires_grad}")
+
     model = model.to(device)
     if args.multigpu:
         model = torch.nn.DataParallel(model)
@@ -415,7 +409,8 @@ def get_args():
     parser.add_argument('--c3_rate', default=1, type=float)
     parser.add_argument('--c4_rate', default=2, type=float)
     parser.add_argument('--c5_rate', default=1, type=float)
-    parser.add_argument('--proj_feat_dim', default=8192, type=int)
+    parser.add_argument('--proj_feat_dim', default=4096, type=int)
+    parser.add_argument('--proj_layers', default=2, type=int)
     parser.add_argument('--layer', default='proj', type=str)
 
     parser.add_argument('--went', default=0.0, type=float)
@@ -423,9 +418,9 @@ def get_args():
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--base_lr', default=0.05, type=float)
     parser.add_argument('--aug', default='hard', type=str)
-    parser.add_argument('--batch_size', default=384, type=int)
+    parser.add_argument('--batch_size', default=256, type=int)
     parser.add_argument('--multigpu', default=False, type=str2bool)
-    parser.add_argument('--epochs', default=101, type=float)
+    parser.add_argument('--epochs', default=200, type=float)
     args = parser.parse_args()
 
     with open(args.config_file, 'r') as f:
@@ -444,8 +439,8 @@ def get_args():
         args.dataset.num_workers = 0
 
     args.train.batch_size = args.batch_size
-    args.train.stop_at_epoch = args.epochs
-    args.train.num_epochs = args.epochs
+    args.train.stop_at_epoch = int(args.epochs)
+    args.train.num_epochs = int(args.epochs)
     args.train.base_lr = args.base_lr
 
     assert not None in [args.log_dir, args.dataset_root, args.ckpt_dir, args.name]
@@ -459,7 +454,7 @@ def get_args():
                  gamma_u ** 2 * scale * args.c5_rate
 
     disc = f"labelnum-{args.labeled_num}-c1-{args.c1:.2f}-c2-{args.c2:.1f}-c3-{args.c3:.1e}-c4-{args.c4:.1e}-c5-{args.c5:.1e}-gamma_l-{args.gamma_l:.2f}-gamma_u-{args.gamma_u:.2f}-r345-{args.c3_rate}-{args.c4_rate}-{args.c5_rate}"+ \
-           f"-fdim-{args.proj_feat_dim}-went{args.went}-mm{args.momentum_proto}-lr{args.base_lr}-seed{args.seed}"
+           f"-fdim-{args.proj_feat_dim}-layer-{args.proj_layers}-went{args.went}-mm{args.momentum_proto}-lr{args.base_lr}-seed{args.seed}"
     args.log_dir = os.path.join(args.log_dir, 'in-progress-'+'{}'.format(date.today())+args.name+'-{}'.format(disc))
 
     os.makedirs(args.log_dir, exist_ok=True)

@@ -389,8 +389,9 @@ def get_args():
         args.dataset.num_workers = 0
 
     args.train.batch_size = args.batch_size
-    args.train.stop_at_epoch = args.epochs
-    args.train.num_epochs = args.epochs
+    args.train.stop_at_epoch = int(args.epochs)
+    args.train.num_epochs = int(args.epochs)
+    args.train.base_lr = args.base_lr
 
     assert not None in [args.log_dir, args.dataset_root, args.ckpt_dir, args.name]
 
