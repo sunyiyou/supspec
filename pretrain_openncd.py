@@ -122,7 +122,6 @@ def main(log_writer, log_file, device, args):
         print("number of iters this epoch: {}".format(len(train_label_loader)))
         unlabel_loader_iter = cycle(train_unlabel_loader)
         for idx, ((x1, x2), target) in enumerate(train_label_loader):
-
             ((ux1, ux2), target_unlabeled) = next(unlabel_loader_iter)
             x1, x2, ux1, ux2, target, target_unlabeled = x1.to(device), x2.to(device), ux1.to(device), ux2.to(device), target.to(device), target_unlabeled.to(device)
 
@@ -347,7 +346,8 @@ def get_args():
     parser.add_argument('--momentum_proto', default=0.95, type=float)
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--base_lr', default=0.002, type=float)
-
+    parser.add_argument('--epochs', default=200, type=float)
+    parser.add_argument('--batch_size', default=512, type=int)
     args = parser.parse_args()
 
     with open(args.config_file, 'r') as f:
@@ -365,6 +365,9 @@ def get_args():
             args.eval.num_epochs = 1 # train only one epoch
         args.dataset.num_workers = 0
 
+    args.train.batch_size = args.batch_size
+    args.train.stop_at_epoch = int(args.epochs)
+    args.train.num_epochs = int(args.epochs)
     args.train.base_lr = args.base_lr
 
     assert not None in [args.log_dir, args.data_dir, args.ckpt_dir, args.name]

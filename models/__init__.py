@@ -16,14 +16,15 @@ def get_backbone(backbone, castrate=True, proj_feat_dim=1000):
 
 
 def get_model(model_cfg, args=None):
-    model_cfg.backbone = {
-        (8192, 2): "resnet50_mlp8192_norelu_2layer",
-        (4096, 2): "resnet50_mlp4096_norelu_2layer",
-        (2048, 2): "resnet50_mlp2048_norelu_2layer",
-        (8192, 3): "resnet50_mlp8192_norelu_3layer",
-        (4096, 3): "resnet50_mlp4096_norelu_3layer",
-        (2048, 3): "resnet50_mlp2048_norelu_3layer",
-    }[(args.proj_feat_dim, args.proj_layers)]
+    if 'cifar' not in args.dataset.name:
+        model_cfg.backbone = {
+            (8192, 2): "resnet50_mlp8192_norelu_2layer",
+            (4096, 2): "resnet50_mlp4096_norelu_2layer",
+            (2048, 2): "resnet50_mlp2048_norelu_2layer",
+            (8192, 3): "resnet50_mlp8192_norelu_3layer",
+            (4096, 3): "resnet50_mlp4096_norelu_3layer",
+            (2048, 3): "resnet50_mlp2048_norelu_3layer",
+        }[(args.proj_feat_dim, args.proj_layers)]
     if model_cfg.name == 'spectral':
         if "mu" not in model_cfg.__dict__:
             model_cfg.mu = 1.0

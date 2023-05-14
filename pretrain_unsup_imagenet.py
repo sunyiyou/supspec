@@ -366,7 +366,7 @@ def get_args():
     parser.add_argument('--momentum_proto', default=0.95, type=float)
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--base_lr', default=0.05, type=float)
-    parser.add_argument('--batch_size', default=16, type=int)
+    parser.add_argument('--batch_size', default=256, type=int)
     parser.add_argument('--multigpu', default=False, type=str2bool)
     parser.add_argument('--epochs', default=200, type=float)
     parser.add_argument('--layer', default='penul', type=str)
